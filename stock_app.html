@@ -694,6 +694,11 @@ PAGES.stock = {
       '<button type="button" class="out" id="bout" data-kind="OUT">− Stock OUT</button></div>';
     h += '</div>';
 
+    var warns = S.lv ? S.lv.issues.filter(function(i){ return !i.resolved; }).sort(function(a, b){ return b.id - a.id; }).slice(0, 100) : [];
+    if(warns.length) h += '<div class="card" style="border-left:5px solid #dc2626;background:#fff7ed"><h2>⚠ Stock / Loyverse warnings (' + warns.length + ')</h2>' +
+      warns.map(function(w){ return '<p style="margin:8px 0;padding:8px;background:#ffedd5;border-radius:6px"><strong>' + (w.kind === "unmatched" ? "Product not in app list" : "Sale exceeded available stock") +
+        ': ' + esc(w.item_name) + '</strong><br>' + esc(w.detail) + ' <small>· ' + esc(w.created_at) + '</small></p>'; }).join("") +
+      '<small>Repeated alerts for the same product are grouped into one active warning. Open Loyverse to match or dismiss unmatched products.</small></div>';
     h += '<div class="card"><h2>Stock by Branch</h2><div class="row" style="margin-bottom:10px"><input id="sbbq" type="search" placeholder="Search product name"></div>' +
       '<div class="scroll"><table class="sbb"><thead><tr><th>Product</th>' + brs.map(function(b){ return '<th class="n">' + esc(b.name) + '</th>'; }).join("") +
       '<th class="n">Total</th></tr></thead><tbody id="sbbbody">' +
@@ -962,6 +967,11 @@ function settleCustomer(name){
 }
 
 /* ---------- Credit ---------- */
+function customerInfo(name){
+  var k = String(name || "").toLowerCase(), place = "", phone = "", c = S.lv ? S.lv.customers : {};
+  Object.keys(c).forEach(function(id){ var x = c[id]; if(x.name && x.name.toLowerCase() === k){ if((x.place || "") > place) place = x.place; if((x.phone || "") > phone) phone = x.phone; } });
+  return {place: place, phone: phone};
+}
 function pendingCredit(){
   return S.sales.filter(function(s){ return s.pay_type === "CREDIT" && !s.settled_at && s.customer && productById(s.product_id) && branchById(s.branch_id); })
     .sort(function(a, b){ return a.created_at < b.created_at ? 1 : a.created_at > b.created_at ? -1 : b.id - a.id; });
@@ -970,19 +980,19 @@ PAGES.credit = {
   title: "Credit",
   render: function(){
     var rows = pendingCredit();
-    return '<div class="card"><h2>Pending credit sales</h2><p><a href="#" id="creditcsv">Download pending credit as CSV</a></p>' +
-      '<div class="scroll"><table><tr><th>When</th><th>Name</th><th>Product</th><th>Branch</th><th class="n">Qty</th><th></th></tr>' +
-      (rows.length ? rows.map(function(c){ var p = productById(c.product_id);
-        return '<tr><td>' + esc(c.created_at.slice(5, 16)) + '</td><td><strong>' + esc(c.customer) + '</strong></td><td>' + esc(p.name) + '</td><td>' + esc(bname(c.branch_id)) + '</td>' +
+    return '<div class="card"><h2>Pending credit sales</h2><p style="margin-top:0"><small>Customer details are saved from Loyverse whenever its sales are synced.</small></p><p><a href="#" id="creditcsv">Download pending credit as CSV</a></p>' +
+      '<div class="scroll"><table><tr><th>When</th><th>Name</th><th>Place</th><th>Phone number</th><th>Product</th><th>Branch</th><th class="n">Qty</th><th></th></tr>' +
+      (rows.length ? rows.map(function(c){ var p = productById(c.product_id), ci = customerInfo(c.customer);
+        return '<tr><td>' + esc(c.created_at.slice(5, 16)) + '</td><td><strong>' + esc(c.customer) + '</strong></td><td>' + esc(ci.place || "—") + '</td><td>' + esc(ci.phone || "—") + '</td><td>' + esc(p.name) + '</td><td>' + esc(bname(c.branch_id)) + '</td>' +
           '<td class="n r">' + fmt(c.qty) + ' ' + esc(p.unit) + '</td><td class="n"><button class="mini" data-settle="' + c.id + '">Mark paid</button></td></tr>'; }).join("")
-        : '<tr><td colspan="6">No unpaid credit sales.</td></tr>') + '</table></div></div>';
+        : '<tr><td colspan="8">No unpaid credit sales.</td></tr>') + '</table></div></div>';
   },
   mount: function(){
     document.querySelectorAll("[data-settle]").forEach(function(b){ b.onclick = function(){ settleSale(+b.getAttribute("data-settle")); }; });
     $("creditcsv").onclick = function(e){
       e.preventDefault();
-      downloadCSV("pending_credit.csv", ["name","product","qty","unit","branch","sale_time"],
-        pendingCredit().map(function(r){ var p = productById(r.product_id); return [r.customer, p.name, r.qty, p.unit, bname(r.branch_id), r.created_at]; }));
+      downloadCSV("pending_credit.csv", ["name","place","phone_number","product","qty","unit","branch","sale_time"],
+        pendingCredit().map(function(r){ var p = productById(r.product_id), ci = customerInfo(r.customer); return [r.customer, ci.place, ci.phone, p.name, r.qty, p.unit, bname(r.branch_id), r.created_at]; }));
     };
   }
 };
@@ -1365,6 +1375,11 @@ function deleteProduct(pid){
   var photos = S.transactions.filter(function(t){ return t.product_id === pid && t.photo; }).map(function(t){ return t.photo; });
   ["transactions", "sales", "transfers", "returns"].forEach(function(tb){ S[tb] = S[tb].filter(function(r){ return r.product_id !== pid; }); });
   if(p) photos.push(p.photo);
+  if(S.lv){
+    Object.keys(S.lv.alias).forEach(function(k){ if(S.lv.alias[k] === pid) delete S.lv.alias[k]; });
+    Object.keys(S.lv.groups).forEach(function(k){ var g = S.lv.groups[k]; g.items = g.items.filter(function(c){ return c.product_id !== pid; }); if(!g.items.length) delete S.lv.groups[k]; });
+    Object.keys(S.lv.lines).forEach(function(k){ S.lv.lines[k] = S.lv.lines[k].filter(function(l){ return l.product_id !== pid; }); });
+  }
   photos.forEach(dropUnusedPhoto);
   save().then(function(){ flash("Product deleted."); render(); });
 }
@@ -1401,7 +1416,8 @@ PAGES.branches = {
       if(S.branches.length <= 1){ flash("You need at least one branch.", "error"); return render(); }
       var used = S.transactions.some(function(t){ return t.branch_id === bid; }) || S.sales.some(function(s){ return s.branch_id === bid; }) ||
         S.transfers.concat(S.returns).some(function(t){ return t.from_branch_id === bid || t.to_branch_id === bid; }) ||
-        Object.keys(S.stock).some(function(k){ return +k.split(":")[0] === bid && S.stock[k] !== 0; });
+        Object.keys(S.stock).some(function(k){ return +k.split(":")[0] === bid && S.stock[k] !== 0; }) ||
+        (S.lv && Object.keys(S.lv.store_map).some(function(k){ return S.lv.store_map[k].branch_id === bid; }));
       if(used){ flash("“" + b.name + "” has stock or history, so it can't be removed. Rename it instead.", "error"); return render(); }
       Object.keys(S.stock).forEach(function(k){ if(+k.split(":")[0] === bid) delete S.stock[k]; });
       S.branches = S.branches.filter(function(x){ return x.id !== bid; });
@@ -1418,6 +1434,8 @@ var USER_PAGES = [
   ["stock", "Stock", "stock", "&#127968;"], ["sales", "Sales", "sales", "&#128176;"], ["credit", "Credit", "credit", "&#128203;"],
   ["transfer", "Transfer", "transfer", "&#128260;"], ["returns", "Return Product", "returns", "&#8617;"],
   ["branchchat", "Branch Dashboard", "branch-chat", "&#128202;"], null,
+  ["loyverse", "Loyverse", "loyverse", "&#128279;"], ["groups", "Product Groups", "groups", "&#128230;"],
+  ["lvmatch", "Loyverse Match", "loyverse-match", "&#128257;"], null,
   ["history", "History", "history", "&#128220;"], ["products", "Products", "products", "&#128218;"],
   ["branches", "Branches", "branches", "&#127978;"], null,
   ["users", "Users", "users", "&#128101;"], ["userlog", "User Log", "user-log", "&#128203;"],
@@ -1427,12 +1445,12 @@ var PAGE_LIST = USER_PAGES.filter(Boolean);
 var PAGE_KEY = {};
 PAGE_LIST.forEach(function(p){ PAGE_KEY[p[2]] = p[0]; });
 var PAGE_KEYS = PAGE_LIST.map(function(p){ return p[0]; });
-var SALES_PAGES = ["sales", "credit", "settings"];          // need the sales password when signed in with the app password
+var SALES_PAGES = ["sales", "credit", "settings", "loyverse", "groups", "lvmatch"];          // need the sales password when signed in with the app password
 var ADMIN_ONLY_DEFAULT = ["users", "userlog", "settings", "backup"];
 var LEGACY_PAGE_ACCESS = {
   sales_only: ["stock", "sales"],
   no_loyverse_branch: ["stock", "sales", "credit", "transfer", "returns", "branchchat", "history", "products"],
-  no_branch: ["stock", "sales", "credit", "transfer", "returns", "branchchat", "history", "products"]
+  no_branch: ["stock", "sales", "credit", "transfer", "returns", "branchchat", "loyverse", "groups", "lvmatch", "history", "products"]
 };
 
 /* --- PBKDF2-SHA256, stored in the same format as the Python app (werkzeug) --- */
@@ -1618,7 +1636,7 @@ function showSetup(){
     note: "Do this now. Whoever opens this page first sets the passwords.",
     fields: [{id: "app_pw", label: "App password (for everyone who uses the app)", ac: "new-password"},
              {id: "app_pw2", label: "Type the app password again", ac: "new-password"},
-             {id: "sales_pw", label: "Sales password (only for Sales, Credit, Settings)", ac: "new-password"},
+             {id: "sales_pw", label: "Sales password (only for Sales, Credit, Loyverse, Settings)", ac: "new-password"},
              {id: "sales_pw2", label: "Type the sales password again", ac: "new-password"}],
     button: "Save passwords",
     extra: '<p style="margin:14px 0 0;font-size:13px">Moving from the Raspberry Pi app? <a href="#" id="setupimport">Import stock_data.db</a> to keep its data, users and passwords.</p><input type="file" id="setupdb" accept=".db,.sqlite,.sqlite3" style="display:none">',
@@ -1879,8 +1897,8 @@ PAGES.settings = {
         '<button data-changepw="' + which + '">Change ' + which + ' password</button></div>' + (which === "sales" ? '<small>Changing either password signs everyone out.</small>' : '') + '</div>';
     }
     return pwCard("app", "App password", "Used to sign in while no user accounts exist.") +
-      pwCard("sales", "Sales password", "Needed for the Sales, Credit and Settings pages when signed in with the app password. Keep it to yourself.") +
-      '<div class="card"><h2>Lock sales now</h2><p style="margin:0 0 10px;font-size:14px;color:#4b5563">Sales, Credit and Settings lock by themselves after ' + SALES_MINUTES + ' minutes without use.</p>' +
+      pwCard("sales", "Sales password", "Needed for the Sales, Credit, Loyverse and Settings pages when signed in with the app password. Keep it to yourself.") +
+      '<div class="card"><h2>Lock sales now</h2><p style="margin:0 0 10px;font-size:14px;color:#4b5563">Sales, Credit, Loyverse and Settings lock by themselves after ' + SALES_MINUTES + ' minutes without use.</p>' +
       '<button class="del" id="locknow" style="padding:10px 14px">Lock now</button></div>' +
       '<div class="card"><h2>Recovery code</h2><p style="margin:0 0 10px;font-size:14px;color:#4b5563">' +
       (S.auth.recovery ? "A recovery code exists. Make a new one if it was lost; the old code stops working." : '<span class="r">No recovery code yet</span> (for example after importing from the Raspberry Pi). Make one now so a forgotten password can be reset.') +
@@ -1917,6 +1935,564 @@ PAGES.settings = {
         showRecoveryCode(code, function(){ flash("New recovery code saved."); hideAuth(); render(); });
       });
     };
+  }
+};
+
+/* =====================================================================
+   Loyverse connection (one-way: Loyverse sales/refunds -> this app)
+   Same rules as stock_app.py, but it runs in the browser, so it only
+   syncs while this page is open somewhere.
+   ===================================================================== */
+var MAX_LOYVERSE_ACCOUNTS = 50, LV_DEFAULT_URL = "https://api.loyverse.com/v1.0";
+var LV_CREDIT_WORDS = ["credit", "udhar", "udhaar", "due", "later"];
+function lvDefault(){
+  return {accounts: [], interval: 60, store_map: {}, pos: [], alias: {}, ignore: {}, groups: {}, receipts: {}, lines: {},
+          issues: [], customers: {}, settings: {enabled: false, start_from: "", last_sync: "", last_ok: "", last_error: ""}};
+}
+function LV(){ if(!S.lv) S.lv = lvDefault(); return S.lv; }
+function lvNorm(name){ return clean(name).toLowerCase(); }
+function lvKeyName(name){ return String(name || "").trim().toLowerCase(); }
+function lvConfigs(){
+  var L = LV();
+  return L.accounts.slice(0, MAX_LOYVERSE_ACCOUNTS).filter(function(a){ return a.token && !/^PASTE/.test(a.token); }).map(function(a, i){
+    return {id: String(a.id || ("acct" + (i + 1))), name: String(a.name || ("Loyverse account " + (i + 1))), token: a.token,
+            base_url: String(a.base_url || LV_DEFAULT_URL).replace(/\/+$/, ""),
+            credit_words: (a.credit_words || LV_CREDIT_WORDS).map(function(w){ return String(w).toLowerCase(); })};
+  });
+}
+function lvStoreKey(accountId, storeId){ return accountId === "default" ? String(storeId) : accountId + "::" + storeId; }
+function isoUtc(d){ return d.toISOString().replace(/\.\d{3}Z$/, ".000Z"); }
+function localStr(text){ var d = new Date(text); if(isNaN(d)) return now(); return dateStr(d) + " " + pad(d.getHours()) + ":" + pad(d.getMinutes()) + ":" + pad(d.getSeconds()); }
+function sleep(ms){ return new Promise(function(ok){ setTimeout(ok, ms); }); }
+function LoyverseError(msg){ this.message = msg; }
+function lvGet(cfg, path, params){
+  var url = cfg.base_url + path;
+  if(params){ var q = new URLSearchParams(); Object.keys(params).forEach(function(k){ q.set(k, params[k]); }); url += "?" + q.toString(); }
+  function attempt(n){
+    return fetch(url, {headers: {"Authorization": "Bearer " + cfg.token, "Accept": "application/json"}, cache: "no-store"})
+      .catch(function(){
+        throw new LoyverseError("Could not reach Loyverse. You may be offline, or Loyverse does not allow requests straight from a web browser " +
+                                "(see the note at the top of this page).");
+      })
+      .then(function(resp){
+        if(resp.status === 429 && n < 2){ var w = parseInt(resp.headers.get("Retry-After") || "5", 10) || 5; return sleep(Math.min(w, 30) * 1000).then(function(){ return attempt(n + 1); }); }
+        if(resp.status === 401 || resp.status === 403) throw new LoyverseError("Loyverse refused the access token (HTTP " + resp.status + "). Check the token.");
+        if(!resp.ok) throw new LoyverseError("Loyverse returned an error (HTTP " + resp.status + ").");
+        return resp.json().catch(function(){ throw new LoyverseError("Loyverse sent a reply that could not be read."); });
+      });
+  }
+  return attempt(0);
+}
+function lvAddIssue(kind, key, itemName, detail, payload){
+  var L = LV(), k = lvKeyName(itemName);
+  var ex = L.issues.find(function(i){ return i.kind === kind && !i.resolved && lvKeyName(i.item_name) === k; });
+  if(ex){
+    if(kind === "unmatched" && payload){ ex.payload = (ex.payload || []).concat([payload]); }
+    else if(payload) ex.payload = payload;
+    ex.receipt_key = key; ex.detail = detail; ex.created_at = now();
+    return;
+  }
+  L.issues.push({id: nextId("lv_issues"), kind: kind, receipt_key: key, item_name: itemName, detail: detail,
+                 payload: payload ? (kind === "unmatched" ? [payload] : payload) : null, created_at: now(), resolved: false});
+}
+function lvIsIgnored(name){ return !!LV().ignore[lvNorm(name)]; }
+function lvIgnoreName(name){
+  var L = LV(), key = lvNorm(name), n = 0;
+  if(!key) return 0;
+  if(!L.ignore[key]) L.ignore[key] = now();
+  L.issues.forEach(function(i){ if(i.kind === "unmatched" && !i.resolved && lvNorm(i.item_name) === key){ i.resolved = true; n++; } });
+  return n;
+}
+function lvMatchProduct(iname, vname){
+  var L = LV(), names = [];
+  if(vname) names.push(iname + " " + vname, iname + " - " + vname, iname + " (" + vname + ")");
+  names.push(iname);
+  for(var i = 0; i < names.length; i++){ var a = L.alias[lvKeyName(names[i])]; if(a && productById(a)) return a; }
+  for(var j = 0; j < names.length; j++){
+    var k = lvKeyName(names[j]), p = S.products.find(function(x){ return x.name.trim().toLowerCase() === k; });
+    if(p) return p.id;
+  }
+  return null;
+}
+function lvApplyLine(pl, pid){
+  var L = LV(), qty = parseFloat(pl.qty), have = getQty(pid, pl.branch_id), delta, saleQty, tag;
+  if(pl.receipt_type === "REFUND"){ delta = qty; saleQty = -qty; tag = "Loyverse refund #" + pl.receipt_key; }
+  else {
+    var take = Math.min(qty, Math.max(0, have));
+    delta = -take; saleQty = qty; tag = "Loyverse #" + pl.receipt_key;
+    if(take < qty) lvAddIssue("shortfall", pl.receipt_key, pl.item_name,
+      "Loyverse sold " + fmt(qty) + " but this app only had " + fmt(have) + ". Stock was set to 0. Check the real count.");
+  }
+  if(delta){ addQty(pid, pl.branch_id, delta); addTx(pid, pl.branch_id, delta > 0 ? "IN" : "OUT", Math.abs(delta), tag, pl.when); }
+  var sid = nextId("sales");
+  S.sales.push({id: sid, product_id: +pid, branch_id: +pl.branch_id, qty: saleQty, price: 0, total: 0, pay_type: pl.pay_type,
+                customer: pl.customer || "", note: tag, created_at: pl.when, settled_at: null});
+  (L.lines[pl.receipt_key] = L.lines[pl.receipt_key] || []).push({product_id: +pid, branch_id: +pl.branch_id, delta: delta, sale_id: sid});
+}
+function lvReverseReceipt(key){
+  var L = LV();
+  (L.lines[key] || []).forEach(function(ln){
+    var idx = S.sales.findIndex(function(s){ return s.id === ln.sale_id; });
+    if(idx < 0) return;
+    if(ln.delta){
+      var back = Math.max(0, getQty(ln.product_id, ln.branch_id) - ln.delta);
+      S.stock[ln.branch_id + ":" + ln.product_id] = back;
+      addTx(ln.product_id, ln.branch_id, -ln.delta > 0 ? "IN" : "OUT", Math.abs(ln.delta), "Loyverse #" + key + " cancelled", now());
+    }
+    S.sales.splice(idx, 1);
+  });
+  delete L.lines[key];
+  if(L.receipts[key]){ L.receipts[key].state = "reversed"; L.receipts[key].note = "cancelled in Loyverse"; }
+}
+function lvClassify(r, cfg){
+  var L = LV(), total = parseFloat(r.total_money || 0) || 0;
+  var pays = (r.payments || []).map(function(p){ return (p.name || "") + " " + (p.type || ""); }).join(" ").toLowerCase();
+  var customer = r.customer_id ? ((L.customers[r.customer_id] || {}).name || "") : "";
+  if(String(r.receipt_type || "SALE").toUpperCase() === "REFUND") return ["PAID", customer];
+  if(["free", "no charge", "no-charge", "complimentary"].some(function(w){ return pays.indexOf(w) >= 0; })) return ["FREE", customer];
+  if(cfg.credit_words.some(function(w){ return pays.indexOf(w) >= 0; })) return ["CREDIT", customer || "Walk-in (Loyverse)"];
+  if(total === 0) return ["FREE", customer];
+  return ["PAID", customer];
+}
+function lvProcessReceipt(cfg, r, storeMap, startFrom, accountId){
+  var L = LV(), raw = String(r.receipt_number || r.id || "").trim();
+  if(!raw) return 0;
+  var key = accountId === "default" ? raw : accountId + "::" + raw, old = L.receipts[key];
+  var cancelled = !!r.cancelled_at, rtype = String(r.receipt_type || "SALE").toUpperCase(), created = r.receipt_date || r.created_at;
+  if(old){ if(cancelled && old.state === "applied"){ lvReverseReceipt(key); return 1; } return 0; }
+  if(startFrom && created && !isNaN(new Date(created)) && new Date(created) < startFrom) return 0;
+  var bid = storeMap[r.store_id], state = "applied", note = "";
+  if(cancelled){ state = "skipped"; note = "cancelled"; }
+  else if(!bid){ state = "skipped"; note = "store not synced"; }
+  if(state === "applied"){
+    var pc = lvClassify(r, cfg), when = localStr(created);
+    (r.line_items || []).forEach(function(li){
+      var qty = Math.abs(parseFloat(li.quantity || 0) || 0);
+      if(qty <= 0) return;
+      var iname = String(li.item_name || "").trim(), vname = String(li.variant_name || "").trim(), shown = (iname + " " + vname).trim();
+      var pl = {receipt_key: key, receipt_type: rtype === "REFUND" ? "REFUND" : "SALE", branch_id: bid, qty: qty, when: when,
+                pay_type: pc[0], customer: pc[1], item_name: shown};
+      if(lvIsIgnored(shown) || (vname && lvIsIgnored(iname))) return;
+      var grp = L.groups[lvKeyName(shown)] || (vname ? L.groups[lvKeyName(iname)] : null);
+      if(grp && grp.items.length){
+        grp.items.slice().sort(function(a, b){ return a.product_id - b.product_id; }).forEach(function(c){
+          if(!productById(c.product_id)) return;
+          lvApplyLine(Object.assign({}, pl, {qty: qty * c.qty}), c.product_id);
+        });
+      } else {
+        var pid = lvMatchProduct(iname, vname);
+        if(pid == null) lvAddIssue("unmatched", key, shown, "Loyverse item “" + shown + "” is not mapped to a product in this app (" + fmt(qty) +
+          " sold). Add it or match it below, or configure it on Product Groups.", pl);
+        else lvApplyLine(pl, pid);
+      }
+    });
+  }
+  L.receipts[key] = {receipt_type: rtype, store_id: r.store_id || "", state: state, note: note, created_at: localStr(created), applied_at: now(), order: nextId("lv_receipts")};
+  return 1;
+}
+function lvRefreshStores(cfg){
+  var L = LV();
+  return lvGet(cfg, "/stores").then(function(data){
+    var stores = data.stores || [];
+    stores.forEach(function(st){
+      if(!st.id) return;
+      var k = lvStoreKey(cfg.id, st.id), raw = st.name || st.id, shown = cfg.id === "default" ? raw : cfg.name + " — " + raw;
+      if(!L.store_map[k]) L.store_map[k] = {name: shown, branch_id: null};
+      else L.store_map[k].name = shown;
+    });
+    return stores;
+  });
+}
+function lvRefreshPos(cfg, stores){
+  var L = LV(), names = {}, devices = [], cursor = null, i = 0;
+  (stores || []).forEach(function(s){ names[s.id] = s.name; });
+  function page(){
+    var params = {limit: 250}; if(cursor) params.cursor = cursor;
+    return lvGet(cfg, "/pos_devices", params).then(function(d){
+      devices = devices.concat(d.pos_devices || []); cursor = d.cursor;
+      if(cursor && ++i < 10) return page();
+    });
+  }
+  return page().then(function(){
+    L.pos = L.pos.filter(function(p){ return p.account_id !== cfg.id; });
+    devices.forEach(function(d){
+      if(!d.id || d.deleted_at) return;
+      L.pos.push({account_id: cfg.id, pos_id: d.id, name: String(d.name || "POS"), store_name: names[d.store_id] || "", activated: d.activated !== false, synced_at: now()});
+    });
+    return L.pos.filter(function(p){ return p.account_id === cfg.id; }).length;
+  });
+}
+function lvSaveCustomer(cid, raw){
+  var name = String(raw.name || "").trim();
+  if(!name){ LV().customers[cid] = {name: ""}; return; }
+  var parts = [];
+  ["address", "city", "region", "country_code"].forEach(function(f){ var v = String(raw[f] || "").trim(); if(v && parts.indexOf(v) < 0) parts.push(v); });
+  LV().customers[cid] = {name: name, place: parts.join(", "), phone: String(raw.phone_number || raw.phone || "").trim(), updated_at: now()};
+}
+var LV_SYNCING = false;
+function lvSyncOnce(){
+  if(LV_SYNCING) return Promise.resolve([false, "A sync is already running."]);
+  var L = LV(), configs = lvConfigs();
+  if(!configs.length) return Promise.resolve([false, "No Loyverse accounts configured. Add an account on the Loyverse page."]);
+  if(!L.settings.start_from) return Promise.resolve([false, "Press ‘Start syncing’ first."]);
+  LV_SYNCING = true;
+  var startFrom = new Date(L.settings.start_from), since = new Date(L.settings.last_sync || L.settings.start_from), checkedAt = new Date();
+  var total = 0, errors = [];
+  function one(cfg){
+    return lvRefreshStores(cfg).then(function(){
+      var prefix = cfg.id + "::", rows = Object.keys(L.store_map).filter(function(k){ return cfg.id === "default" ? k.indexOf("::") < 0 : k.indexOf(prefix) === 0; });
+      if(rows.some(function(k){ return L.store_map[k].branch_id === null; })) throw new LoyverseError("map every store to a branch or ‘Don't sync’.");
+      if(!rows.length) throw new LoyverseError("no stores returned by Loyverse.");
+      var storeMap = {};
+      rows.forEach(function(k){ storeMap[cfg.id === "default" ? k : k.slice(prefix.length)] = L.store_map[k].branch_id || 0; });
+      var params = {updated_at_min: isoUtc(new Date(since.getTime() - 10 * 60000)), limit: 250}, receipts = [], n = 0;
+      function page(){
+        return lvGet(cfg, "/receipts", params).then(function(d){
+          receipts = receipts.concat(d.receipts || []);
+          if(d.cursor && ++n < 40){ params.cursor = d.cursor; return page(); }
+        });
+      }
+      return page().then(function(){
+        // Load unknown customers first, then apply every receipt in one go (no half-applied state)
+        var need = {};
+        receipts.forEach(function(r){ if(r.customer_id && !L.customers[r.customer_id] && L.receipts[(cfg.id === "default" ? "" : cfg.id + "::") + String(r.receipt_number || r.id || "").trim()] === undefined) need[r.customer_id] = 1; });
+        return Object.keys(need).reduce(function(p, cid){
+          return p.then(function(){ return lvGet(cfg, "/customers/" + encodeURIComponent(cid)).then(function(raw){ lvSaveCustomer(cid, raw || {}); }, function(){ lvSaveCustomer(cid, {}); }); });
+        }, Promise.resolve());
+      }).then(function(){
+        receipts.sort(function(a, b){ return String(a.created_at || "") < String(b.created_at || "") ? -1 : String(a.created_at || "") > String(b.created_at || "") ? 1 : 0; });
+        receipts.forEach(function(r){ total += lvProcessReceipt(cfg, r, storeMap, startFrom, cfg.id); });
+      });
+    }).catch(function(e){ errors.push(cfg.name + ": " + (e && e.message ? e.message : e)); });
+  }
+  return configs.reduce(function(p, cfg){ return p.then(function(){ return one(cfg); }); }, Promise.resolve()).then(function(){
+    if(!errors.length) L.settings.last_sync = isoUtc(checkedAt);
+    L.settings.last_ok = now(); L.settings.last_error = errors.join(" | ");
+    return save();
+  }).then(function(){
+    LV_SYNCING = false;
+    if(errors.length) return [false, "Checked " + configs.length + " account(s); applied " + total + " receipt(s). Issues: " + errors.join(" | ")];
+    return [true, "Checked " + configs.length + " Loyverse account(s). " + total + " new or changed receipt(s) applied."];
+  }, function(e){ LV_SYNCING = false; return [false, "Unexpected problem: " + (e && e.message ? e.message : e)]; });
+}
+/* Background sync while the page is open (only one open tab syncs at a time) */
+var LV_TIMER = null;
+function lvSchedule(){
+  if(LV_TIMER) clearTimeout(LV_TIMER);
+  var L = S && S.lv;
+  LV_TIMER = setTimeout(function(){
+    var L2 = S && S.lv;
+    if(!(L2 && L2.settings.enabled && lvConfigs().length)) return lvSchedule();
+    var run = function(){ return lvSyncOnce().then(function(){ if(!busy() && $("authscreen").style.display === "none") render(); }); };
+    var p = navigator.locks && navigator.locks.request ? navigator.locks.request("stock_lv_sync", {ifAvailable: true}, function(lock){ return lock ? run() : null; }) : run();
+    Promise.resolve(p).catch(function(){}).then(lvSchedule);
+  }, Math.max(30, (L && L.interval) || 60) * 1000);
+}
+function lvApplyPending(name, pid){
+  var L = LV(), k = lvKeyName(name), n = 0;
+  L.issues.forEach(function(it){
+    if(it.kind !== "unmatched" || it.resolved || lvKeyName(it.item_name) !== k) return;
+    (Array.isArray(it.payload) ? it.payload : it.payload ? [it.payload] : []).forEach(function(pl){ lvApplyLine(pl, pid); n++; });
+    it.resolved = true;
+  });
+  return n;
+}
+function lvGroupList(){
+  var L = LV();
+  return Object.keys(L.groups).map(function(k){ return L.groups[k]; }).sort(function(a, b){ return a.name.toLowerCase() < b.name.toLowerCase() ? -1 : 1; })
+    .map(function(g){ return {name: g.name, components: g.items.filter(function(c){ return productById(c.product_id); })
+      .map(function(c){ return {name: productById(c.product_id).name, qty: c.qty}; }).sort(function(a, b){ return a.name < b.name ? -1 : 1; })}; });
+}
+function productSelect(attrs, label){
+  return '<select ' + attrs + '><option value="">' + (label || "Choose app product…") + '</option>' + products().map(function(p){ return '<option value="' + p.id + '">' + esc(p.name) + '</option>'; }).join("") + '</select>';
+}
+function ignoreListHtml(){
+  var L = LV(), names = Object.keys(L.ignore).sort();
+  if(!names.length) return "";
+  return '<h3 style="margin:16px 0 6px;font-size:15px">Ignore list (' + names.length + ')</h3>' + names.map(function(n){
+    return '<div style="display:flex;gap:8px;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid #e5e7eb"><span>' + esc(n) +
+      '</span><button class="del" data-unignore="' + esc(n) + '">Stop ignoring</button></div>'; }).join("");
+}
+function bindIgnoreList(){
+  document.querySelectorAll("[data-unignore]").forEach(function(b){ b.onclick = function(){
+    var n = b.getAttribute("data-unignore"); delete LV().ignore[n];
+    save().then(function(){ flash("‘" + n + "’ is no longer ignored. Its next Loyverse sale will ask you to match it again."); render(); });
+  }; });
+}
+function lvStartText(){ var s = LV().settings.start_from; return s ? localStr(s) : ""; }
+
+/* ---------- Loyverse page ---------- */
+PAGES.loyverse = {
+  title: "Loyverse",
+  render: function(){
+    var L = LV(), accounts = lvConfigs(), maps = Object.keys(L.store_map).sort(function(a, b){ return L.store_map[a].name.toLowerCase() < L.store_map[b].name.toLowerCase() ? -1 : 1; });
+    var issues = L.issues.filter(function(i){ return !i.resolved; }).sort(function(a, b){ return b.id - a.id; }).slice(0, 100);
+    var unmatched = issues.filter(function(i){ return i.kind === "unmatched"; });
+    var recent = Object.keys(L.receipts).map(function(k){ return Object.assign({key: k}, L.receipts[k]); }).sort(function(a, b){ return (b.order || 0) - (a.order || 0); }).slice(0, 15);
+    var nApplied = Object.keys(L.receipts).filter(function(k){ return L.receipts[k].state === "applied"; }).length;
+    var h = '<div class="card" style="border-left:5px solid #ca8a04;background:#fffbeb"><h2>⚠ How Loyverse works in this HTML version</h2>' +
+      '<ul style="margin:0;padding-left:18px;font-size:14px;line-height:1.6">' +
+      '<li><strong>It only syncs while this page is open</strong> in a browser (every ' + Math.max(30, L.interval || 60) + ' seconds). Sales made while it is closed are picked up the next time it opens.</li>' +
+      '<li>The access token is saved <strong>in this browser</strong> and inside backup files. Anyone who can use this device or a backup could reach your Loyverse account. Keep backups private.</li>' +
+      '<li>If “Test” says <em>Could not reach Loyverse</em> while you are online, Loyverse is blocking requests from web pages. Then keep using the Raspberry Pi app for Loyverse, or put an API address of a forwarding server you control under “Advanced”.</li></ul></div>';
+
+    h += '<div class="card"><h2>Loyverse accounts (' + accounts.length + '/' + MAX_LOYVERSE_ACCOUNTS + ')</h2>' +
+      '<p>Connect up to ' + MAX_LOYVERSE_ACCOUNTS + ' separate Loyverse accounts. Access tokens are never displayed again after saving.</p>' +
+      (accounts.length ? accounts.map(function(a){
+        var plist = L.pos.filter(function(p){ return p.account_id === a.id; }).sort(function(x, y){ return (x.store_name + x.name).toLowerCase() < (y.store_name + y.name).toLowerCase() ? -1 : 1; });
+        return '<div class="row" style="align-items:center;border:1px solid #e5e7eb;border-radius:8px;padding:8px;margin:6px 0"><div style="flex:1"><strong>' + esc(a.name) + '</strong><br><small>Token saved · ID ' + esc(a.id) +
+          (a.base_url !== LV_DEFAULT_URL ? ' · ' + esc(a.base_url) : '') + '</small>' +
+          '<div style="margin-top:6px;font-size:13px"><b style="color:#6b7280">POS (' + plist.length + ')</b>' +
+          (plist.length ? plist.map(function(d){ return '<div>' + (d.activated ? '<span style="color:#15803d">●</span>' : '<span style="color:#9ca3af">○</span>') + ' ' + esc(d.name) +
+            (d.store_name ? ' <small style="color:#6b7280">· ' + esc(d.store_name) + '</small>' : '') + (d.activated ? '' : ' <small style="color:#9ca3af">(not activated)</small>') + '</div>'; }).join("")
+            : '<div style="color:#6b7280">Not loaded yet — press “Test all account connections and load stores”.</div>') + '</div></div>' +
+          '<button class="del" style="flex:0 0 auto;min-width:0" data-delacct="' + esc(a.id) + '">Remove</button></div>';
+      }).join("") : '<p><strong>No Loyverse accounts configured.</strong> Add the first account below.</p>') +
+      (accounts.length < MAX_LOYVERSE_ACCOUNTS ?
+        '<div style="margin-top:12px"><label>Account name</label><input id="lvname" maxlength="60" placeholder="e.g. Main Shop" style="width:100%">' +
+        '<label style="margin-top:8px;display:block">Loyverse access token</label><input id="lvtoken" autocomplete="off" placeholder="Paste access token" style="width:100%">' +
+        '<details style="margin-top:8px"><summary>Advanced</summary><label>API address</label><input id="lvurl" value="' + LV_DEFAULT_URL + '" style="width:100%"></details>' +
+        '<button style="margin-top:10px" id="lvadd">Add account and test later</button></div>' : '') +
+      '<div class="row" style="margin-top:10px"><button id="lvtest">Test all account connections and load stores</button></div>' +
+      '<p style="margin:12px 0 0"><small>Moving from the Raspberry Pi? Import <code>stock_data.db</code> on Backup &amp; Data first, then load the Pi\'s <code>loyverse_config.json</code> here to keep the same accounts: ' +
+      '<input type="file" id="lvcfg" accept=".json,application/json"></small></p></div>';
+
+    if(accounts.length){
+      h += '<div class="card"><h2>1 · Match Loyverse stores to your branches</h2>' + (!maps.length ? '<p>Press <b>Test</b> above to load your Loyverse stores.</p>' :
+        '<div class="scroll"><table><tr><th>Loyverse store</th><th>This app\'s branch</th></tr>' + maps.map(function(k){ var m = L.store_map[k];
+          return '<tr><td>' + esc(m.name) + '</td><td><select data-map="' + esc(k) + '"><option value=""' + (m.branch_id === null ? " selected" : "") + '>— choose —</option>' +
+            '<option value="0"' + (m.branch_id === 0 ? " selected" : "") + '>Don\'t sync this store</option>' + branchOptions(m.branch_id || -1) + '</select></td></tr>'; }).join("") +
+        '</table></div><button style="margin-top:10px" id="lvmapsave">Save matching</button>') + '</div>';
+
+      h += '<div class="card"><h2>2 · Syncing</h2><div style="display:grid;grid-template-columns:auto 1fr;gap:6px 14px;font-size:14px;margin-bottom:12px">' +
+        '<b>Status</b><span>' + (L.settings.enabled ? '<strong style="color:#166534">ON</strong> – checking Loyverse every ' + Math.max(30, L.interval || 60) + ' seconds while this page is open' : '<strong>OFF</strong>') + '</span>' +
+        '<b>Counting sales from</b><span>' + esc(lvStartText() || "—") + '</span><b>Last check</b><span>' + esc(L.settings.last_ok || "—") + '</span>' +
+        (L.settings.last_error ? '<b>Problem</b><span class="r">' + esc(L.settings.last_error) + '</span>' : '') +
+        '<b>Receipts imported</b><span>' + nApplied + '</span></div>' +
+        (!L.settings.enabled ? '<div class="row" style="align-items:end"><div><label style="font-size:12px;color:#6b7280">Count Loyverse sales from (leave empty = from now)</label><input type="date" id="lvfrom" style="width:100%"></div>' +
+          '<button class="in" id="lvstart">Start syncing</button></div><small>Only sales after this moment change your stock. Set your opening stock in this app first.</small>'
+          : '<div class="row"><button id="lvsync">Sync now</button><button class="del" id="lvstop" style="padding:8px">Stop syncing</button></div>') + '</div>';
+
+      h += '<div class="card"><h2>Needs your attention (' + issues.length + ')</h2>';
+      if(unmatched.length) h += '<div style="border:1px solid #fde68a;background:#fffbeb;border-radius:10px;padding:10px;margin-bottom:12px" id="bulkbox"><strong>Bulk add unknown Loyverse products</strong>' +
+        '<p style="font-size:13px">Select several missing items to create them in this app at once. They will start with zero stock; enter opening stock on the Products page. Pending sale lines will be processed and any stock shortfall will remain visible as a warning.</p>' +
+        unmatched.map(function(i){ return '<label style="display:flex;gap:8px;align-items:center;margin:6px 0"><input type="checkbox" name="bulkiss" value="' + i.id + '" style="width:auto"> <span>' + esc(i.item_name) + ' <small>— ' + esc(i.detail) + '</small></span></label>'; }).join("") +
+        '<button class="in" id="lvbulk">Add selected products</button></div>';
+      h += issues.length ? issues.map(function(i){
+        return '<div style="border:1px solid #fde68a;background:#fffbeb;border-radius:10px;padding:10px;margin-bottom:8px"><div><strong>' + (i.kind === "unmatched" ? "Product not found" : "Stock was too low") + ': ' + esc(i.item_name) + '</strong>' +
+          '<small> · receipt #' + esc(i.receipt_key) + ' · ' + esc(i.created_at) + '</small></div><div style="font-size:13px;margin:4px 0 8px">' + esc(i.detail) + '</div>' +
+          (i.kind === "unmatched" ? '<div class="row">' + productSelect('data-matchsel="' + i.id + '"', "Which product is this?") + '<button class="in" data-match="' + i.id + '">Match and apply</button></div>' : '') +
+          '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px"><button class="del" data-dismiss="' + i.id + '">Dismiss</button>' +
+          (i.kind === "unmatched" ? '<button class="del" data-ignore="' + esc(i.item_name) + '" title="Never count this Loyverse item in this app">Ignore this item</button>' : '') + '</div></div>';
+      }).join("") : '<p style="margin:0;color:#6b7280">Nothing to fix.</p>';
+      h += '<small>When Loyverse sells a product this app doesn\'t know, match it once and future sales match automatically. <b>Dismiss</b> only clears this warning; <b>Ignore this item</b> also skips all its future sales.</small>' + ignoreListHtml() + '</div>';
+
+      h += '<div class="card"><h2>Recent Loyverse receipts</h2><div class="scroll"><table><tr><th>When</th><th>Receipt</th><th>Type</th><th>Result</th></tr>' +
+        (recent.length ? recent.map(function(r){ return '<tr><td>' + esc((r.created_at || "").slice(5, 16)) + '</td><td>#' + esc(r.key) + '</td><td>' + esc(r.receipt_type) + '</td><td>' + esc(r.state) + (r.note ? ' · ' + esc(r.note) : '') + '</td></tr>'; }).join("")
+          : '<tr><td colspan="4">None yet.</td></tr>') + '</table></div></div>';
+    }
+    return h;
+  },
+  mount: function(){
+    var L = LV();
+    function done(msg, cat){ return save().then(function(){ if(msg) flash(msg, cat); render(); }); }
+    var add = $("lvadd");
+    if(add) add.onclick = function(){
+      var name = $("lvname").value.trim(), token = $("lvtoken").value.trim(), url = ($("lvurl").value.trim() || LV_DEFAULT_URL).replace(/\/+$/, "");
+      if(!name || !token){ flash("Enter an account name and access token.", "error"); return render(); }
+      if(!/^https:\/\//i.test(url)){ flash("The API address must start with https://", "error"); return render(); }
+      if(L.accounts.some(function(a){ return String(a.name || "").toLowerCase() === name.toLowerCase(); })){ flash("Use a unique account name so the stores are easy to identify.", "error"); return render(); }
+      L.accounts.push({id: "acct" + randomText(8, "0123456789abcdef"), name: name, token: token, base_url: url === LV_DEFAULT_URL ? undefined : url});
+      done("Added " + name + ". Press ‘Test all account connections and load stores’ next.");
+    };
+    document.querySelectorAll("[data-delacct]").forEach(function(b){ b.onclick = function(){
+      if(!confirm("Remove this account connection? Existing sales history will remain.")) return;
+      var id = b.getAttribute("data-delacct");
+      L.accounts = L.accounts.filter(function(a){ return String(a.id) !== id; });
+      L.pos = L.pos.filter(function(p){ return p.account_id !== id; });
+      Object.keys(L.store_map).forEach(function(k){ if(id === "default" ? k.indexOf("::") < 0 : k.indexOf(id + "::") === 0) delete L.store_map[k]; });
+      done("Account connection removed. Existing sales history and stock records were kept.");
+    }; });
+    $("lvtest").onclick = function(){
+      var cfgs = lvConfigs(), btn = this;
+      if(!cfgs.length){ flash("Add at least one Loyverse account first.", "error"); return render(); }
+      btn.disabled = true; btn.textContent = "Testing…";
+      var results = [];
+      cfgs.reduce(function(p, cfg){
+        return p.then(function(){
+          return lvRefreshStores(cfg).then(function(stores){
+            return lvGet(cfg, "/receipts", {limit: 1}).then(function(){
+              return lvRefreshPos(cfg, stores).then(function(n){ return n + " POS"; }, function(e){ return "POS list not loaded (" + e.message + ")"; });
+            }).then(function(np){ results.push(cfg.name + ": connected, " + stores.length + " store(s), " + np); });
+          }).catch(function(e){ results.push(cfg.name + ": ERROR — " + (e.message || e)); });
+        });
+      }, Promise.resolve()).then(function(){ done(results.join("; "), results.some(function(r){ return r.indexOf("ERROR") >= 0; }) ? "error" : ""); });
+    };
+    var cfgIn = $("lvcfg");
+    if(cfgIn) cfgIn.onchange = function(){
+      var f = this.files && this.files[0]; if(!f) return;
+      f.text().then(function(t){
+        var raw = JSON.parse(t), list = Array.isArray(raw.accounts) ? raw.accounts : raw.token ? [{id: "default", name: raw.name || "Loyverse account", token: raw.token, base_url: raw.base_url, credit_words: raw.credit_words}] : [];
+        var added = 0;
+        list.forEach(function(a){
+          var token = String(a.token || "").trim();
+          if(!token || /^PASTE/.test(token) || L.accounts.some(function(x){ return String(x.id) === String(a.id); })) return;
+          L.accounts.push({id: String(a.id || ("acct" + randomText(8, "0123456789abcdef"))), name: String(a.name || "Loyverse account"), token: token,
+                           base_url: a.base_url || raw.base_url || undefined, credit_words: a.credit_words || raw.credit_words || undefined});
+          added++;
+        });
+        if(raw.interval_seconds) L.interval = Math.max(30, parseInt(raw.interval_seconds, 10) || 60);
+        return done("Loaded " + added + " account(s) from " + f.name + ".");
+      }).catch(function(e){ flash("Could not read that file: " + (e.message || e), "error"); render(); });
+    };
+    var ms = $("lvmapsave");
+    if(ms) ms.onclick = function(){
+      document.querySelectorAll("[data-map]").forEach(function(s){ var k = s.getAttribute("data-map"); if(L.store_map[k]) L.store_map[k].branch_id = s.value === "" ? null : +s.value; });
+      done("Store matching saved.");
+    };
+    var st = $("lvstart");
+    if(st) st.onclick = function(){
+      var keys = Object.keys(L.store_map);
+      if(!keys.length || keys.some(function(k){ return L.store_map[k].branch_id === null; })){ flash("First match every Loyverse store to a branch (or choose “Don't sync”).", "error"); return render(); }
+      var txt = $("lvfrom").value, start = txt ? new Date(txt + "T00:00:00") : new Date();
+      if(isNaN(start)){ flash("That date is not valid.", "error"); return render(); }
+      Object.assign(L.settings, {start_from: isoUtc(start), last_sync: "", enabled: true, last_error: ""});
+      st.disabled = true; st.textContent = "Syncing…";
+      flash("Syncing is on. New Loyverse sales will update stock here while this page is open.");
+      save().then(lvSyncOnce).then(function(r){ flash(r[1], r[0] ? "" : "error"); render(); });
+    };
+    var sn = $("lvsync");
+    if(sn) sn.onclick = function(){ sn.disabled = true; sn.textContent = "Syncing…"; lvSyncOnce().then(function(r){ flash(r[1], r[0] ? "" : "error"); render(); }); };
+    var sp = $("lvstop");
+    if(sp) sp.onclick = function(){ L.settings.enabled = false; done("Syncing stopped. Nothing else changes until you start it again."); };
+    var bk = $("lvbulk");
+    if(bk) bk.onclick = function(){
+      var ids = checkedValues($("bulkbox"), "bulkiss").map(Number), added = 0, matched = 0;
+      if(!ids.length){ flash("Select at least one unknown Loyverse product.", "error"); return render(); }
+      ids.forEach(function(iid){
+        var it = L.issues.find(function(i){ return i.id === iid && i.kind === "unmatched" && !i.resolved; });
+        if(!it) return;
+        var name = String(it.item_name || "").trim(); if(!name) return;
+        var p = S.products.find(function(x){ return x.name.trim().toLowerCase() === name.toLowerCase(); });
+        if(p) matched++; else { p = createProduct(name, "pcs", 0, 0, 0); added++; }
+        L.alias[name.toLowerCase()] = p.id;
+        lvApplyPending(name, p.id);
+      });
+      done("Created " + added + " product(s); matched " + matched + " existing product(s). Pending Loyverse lines were processed. Check stock warnings and set opening stock for newly created products.");
+    };
+    document.querySelectorAll("[data-match]").forEach(function(b){ b.onclick = function(){
+      var iid = +b.getAttribute("data-match"), pid = +document.querySelector("[data-matchsel='" + iid + "']").value;
+      var it = L.issues.find(function(i){ return i.id === iid && i.kind === "unmatched" && !i.resolved; });
+      if(!pid){ flash("Choose a product.", "error"); return render(); }
+      if(!it || !productById(pid)){ flash("That item was already handled.", "error"); return render(); }
+      L.alias[it.item_name.toLowerCase()] = pid;
+      var n = lvApplyPending(it.item_name, pid);
+      done("Matched. " + n + " sale line(s) applied to stock. Future sales of this item match automatically.");
+    }; });
+    document.querySelectorAll("[data-dismiss]").forEach(function(b){ b.onclick = function(){
+      var it = L.issues.find(function(i){ return i.id === +b.getAttribute("data-dismiss"); }); if(it) it.resolved = true; done();
+    }; });
+    document.querySelectorAll("[data-ignore]").forEach(function(b){ b.onclick = function(){
+      var n = clean(b.getAttribute("data-ignore"));
+      if(!confirm("Ignore " + n + "? Its future Loyverse sales will not change stock here.")) return;
+      lvIgnoreName(n); done("Ignoring ‘" + n + "’. Its Loyverse sales will no longer change stock here.");
+    }; });
+    bindIgnoreList();
+  }
+};
+
+/* ---------- Product Groups ---------- */
+PAGES.groups = {
+  title: "Product Groups",
+  render: function(){
+    var groups = lvGroupList();
+    return '<div class="card"><h2>Product Groups / Bundle Mapping</h2><p>Use this page when one Loyverse item represents several separate products in this app. Example: Loyverse “Book and Pen” can deduct 1 Book and 1 Pen for every bundle sold. A bundle can contain different quantities of each component.</p>' +
+      '<label>Loyverse item name (must match the sale item name)</label><input id="gname" maxlength="180" placeholder="e.g. Book and Pen" style="width:100%">' +
+      '<h3>Choose components and quantities per bundle</h3><div class="scroll" id="gtable"><table><tr><th>Include</th><th>Stock product</th><th>Qty per bundle</th></tr>' +
+      (products().length ? products().map(function(p){ return '<tr><td><input type="checkbox" name="gp" value="' + p.id + '" style="width:auto"></td><td>' + esc(p.name) + '</td><td><input type="number" data-gq="' + p.id + '" min="0.01" step="0.01" value="1" style="max-width:120px"></td></tr>'; }).join("")
+        : '<tr><td colspan="3">No products yet.</td></tr>') + '</table></div><button style="margin-top:10px" id="gsave">Save product group</button></div>' +
+      '<div class="card"><h2>Saved groups (' + groups.length + ')</h2>' + (groups.length ? groups.map(function(g){
+        return '<div style="border:1px solid #e5e7eb;border-radius:8px;padding:10px;margin:8px 0"><strong>' + esc(g.name) + '</strong><ul>' +
+          g.components.map(function(c){ return '<li>' + esc(c.name) + ' × ' + fmt(c.qty) + '</li>'; }).join("") + '</ul><button class="del" data-gdel="' + esc(g.name) + '">Delete group</button></div>'; }).join("")
+        : '<p>No product groups configured yet.</p>') + '</div>';
+  },
+  mount: function(){
+    var L = LV();
+    $("gsave").onclick = function(){
+      var name = $("gname").value.trim(), ids = checkedValues($("gtable"), "gp").map(Number), comps = [];
+      if(!name || !ids.length){ flash("Enter the Loyverse item name and select at least one component product.", "error"); return render(); }
+      for(var i = 0; i < ids.length; i++){
+        var q = parseFloat(document.querySelector("[data-gq='" + ids[i] + "']").value);
+        if(!(q > 0) || !productById(ids[i])){ flash("Component quantities must be greater than zero.", "error"); return render(); }
+        comps.push({product_id: ids[i], qty: q});
+      }
+      L.groups[lvKeyName(name)] = {name: name, items: comps};
+      save().then(function(){ flash("Saved group ‘" + name + "’ with " + comps.length + " component product(s). Future Loyverse sales will deduct each component from the mapped branch."); render(); });
+    };
+    document.querySelectorAll("[data-gdel]").forEach(function(b){ b.onclick = function(){
+      var n = b.getAttribute("data-gdel"); delete L.groups[lvKeyName(n)];
+      save().then(function(){ flash("Deleted product group ‘" + n + "’."); render(); });
+    }; });
+  }
+};
+
+/* ---------- Loyverse Match ---------- */
+PAGES["loyverse-match"] = {
+  title: "Loyverse Match",
+  render: function(args){
+    var L = LV(), q = (args.q || "").trim(), ql = q.toLowerCase(), um = {}, order = [];
+    L.issues.filter(function(i){ return i.kind === "unmatched" && !i.resolved && String(i.item_name || "").trim(); }).sort(function(a, b){ return b.id - a.id; }).forEach(function(i){
+      var k = i.item_name.trim().toLowerCase();
+      if(!um[k]){ um[k] = {name: i.item_name.trim(), lines: 0, last: i.created_at || ""}; order.push(k); }
+      um[k].lines += Array.isArray(i.payload) ? i.payload.length : i.payload ? 1 : 0;
+    });
+    var matched = Object.keys(L.alias).filter(function(k){ return productById(L.alias[k]); }).map(function(k){ var p = productById(L.alias[k]); return {lv_name: k, product: p.name, unit: p.unit}; })
+      .sort(function(a, b){ return a.lv_name < b.lv_name ? -1 : 1; });
+    var groups = lvGroupList();
+    if(ql){
+      matched = matched.filter(function(m){ return m.lv_name.toLowerCase().indexOf(ql) >= 0 || m.product.toLowerCase().indexOf(ql) >= 0; });
+      groups = groups.filter(function(g){ return g.name.toLowerCase().indexOf(ql) >= 0 || g.components.some(function(c){ return c.name.toLowerCase().indexOf(ql) >= 0; }); });
+    }
+    return '<div class="card"><h2>Needs matching <small style="font-weight:400;color:#6b7280">· ' + order.length + ' Loyverse item(s)</small></h2>' +
+      (order.length ? order.map(function(k){ var u = um[k];
+        return '<div class="row" style="padding:8px 0;border-bottom:1px solid #e5e7eb;align-items:center"><div style="flex:1 1 200px"><strong>' + esc(u.name) + '</strong><br><small>' + u.lines + ' sale line(s) waiting · last ' + esc(u.last) + '</small></div>' +
+          productSelect('data-umsel="' + esc(u.name) + '" style="flex:1 1 180px"') + '<button data-umlink="' + esc(u.name) + '">Match</button><button class="del" data-umignore="' + esc(u.name) + '">Ignore</button></div>'; }).join("")
+        : '<p>✓ Every Loyverse item is matched.</p>') + ignoreListHtml() +
+      '<small>Matching applies the waiting sales to stock, and future sales of this item match automatically.</small></div>' +
+      '<div class="card"><h2>Loyverse item → App product</h2><div class="row" style="margin-bottom:10px"><input id="mq" value="' + esc(q) + '" placeholder="Search Loyverse or app product name"><button id="mqgo">Search</button></div>' +
+      '<div class="scroll"><table><tr><th>Loyverse item</th><th>App product</th><th></th></tr>' +
+      matched.map(function(m){ return '<tr><td>' + esc(m.lv_name) + '</td><td><strong>' + esc(m.product) + '</strong> <small>' + esc(m.unit) + '</small></td><td><button class="del" data-unlink="' + esc(m.lv_name) + '">Unlink</button></td></tr>'; }).join("") +
+      groups.map(function(g){ return '<tr><td>' + esc(g.name) + '</td><td>' + g.components.map(function(c){ return esc(c.name) + ' × ' + fmt(c.qty); }).join("<br>") + ' <small style="color:#6b7280">(group)</small></td><td></td></tr>'; }).join("") +
+      (!matched.length && !groups.length ? '<tr><td colspan="3">Nothing matched yet.</td></tr>' : '') + '</table></div>' +
+      '<h2 style="margin-top:16px;font-size:16px">Link a Loyverse item name by hand</h2><div class="row"><input id="hlname" placeholder="Loyverse item name, exactly as in Loyverse">' + productSelect('id="hlprod"') + '<button id="hllink">Link</button></div>' +
+      '<small>Loyverse items with exactly the same name as an app product match automatically and are not listed here. Groups are edited on the Product Groups page.</small></div>';
+  },
+  mount: function(){
+    var L = LV();
+    function link(name, pid){
+      name = clean(name);
+      if(!name || !productById(pid)){ flash("Enter the Loyverse item name and choose an app product.", "error"); return render(); }
+      L.alias[name.toLowerCase()] = +pid;
+      var n = lvApplyPending(name, +pid);
+      save().then(function(){ flash("Linked ‘" + name + "’. " + (n ? n + " waiting sale line(s) applied to stock. " : "") + "Future sales of this item match automatically."); render(); });
+    }
+    $("mqgo").onclick = function(){ go("loyverse-match", {q: $("mq").value}); };
+    $("hllink").onclick = function(){ link($("hlname").value, $("hlprod").value); };
+    document.querySelectorAll("[data-umlink]").forEach(function(b){ b.onclick = function(){
+      var n = b.getAttribute("data-umlink"), sel = Array.prototype.find.call(document.querySelectorAll("[data-umsel]"), function(s){ return s.getAttribute("data-umsel") === n; });
+      link(n, sel ? sel.value : "");
+    }; });
+    document.querySelectorAll("[data-umignore]").forEach(function(b){ b.onclick = function(){
+      var n = clean(b.getAttribute("data-umignore"));
+      if(!confirm("Ignore this item? Its future Loyverse sales will not change stock here.")) return;
+      lvIgnoreName(n); save().then(function(){ flash("Ignoring ‘" + n + "’. Its Loyverse sales will no longer change stock here."); render(); });
+    }; });
+    document.querySelectorAll("[data-unlink]").forEach(function(b){ b.onclick = function(){
+      var n = b.getAttribute("data-unlink");
+      if(!confirm("Remove this match? Past sales are not changed.")) return;
+      delete L.alias[n]; save().then(function(){ flash("Removed the match for ‘" + n + "’. Past sales were not changed; new sales of it will need matching again."); render(); });
+    }; });
+    bindIgnoreList();
   }
 };
 
@@ -1979,7 +2555,8 @@ PAGES.backup = {
 function normalize(d){
   var s = {version: 1, seq: d.seq || {}, branches: d.branches || [], products: d.products || [], stock: d.stock || {},
            transactions: d.transactions || [], sales: d.sales || [], transfers: d.transfers || [], returns: d.returns || [], photos: d.photos || {},
-           auth: d.auth && d.auth.pw_app ? d.auth : null};
+           auth: d.auth && d.auth.pw_app ? d.auth : null, lv: Object.assign(lvDefault(), d.lv || {})};
+  s.lv.settings = Object.assign(lvDefault().settings, s.lv.settings || {});
   if(s.auth){ s.auth.users = s.auth.users || []; s.auth.log = s.auth.log || []; s.auth.ver = s.auth.ver || 1; }
   if(s.auth && s.auth.users.length) s.seq.users = Math.max(s.seq.users || 0, s.auth.users.reduce(function(a, u){ return Math.max(a, u.id); }, 0));
   ["branches", "products", "transactions", "sales", "transfers", "returns"].forEach(function(t){
@@ -2027,6 +2604,29 @@ function importSqlite(file){
           .map(function(r, i){ return {id: i + 1, username: r.username, event: r.event, device: r.device || "", created_at: r.created_at}; });
         d.seq = {user_log: auth.log.length};
       }
+      // Loyverse data (the access tokens are in loyverse_config.json on the Pi, loaded on the Loyverse page)
+      var lv = lvDefault(), nlv = 0;
+      (rows("SELECT lv_store_id, lv_store_name, branch_id FROM lv_store_map") || []).forEach(function(m){ lv.store_map[m.lv_store_id] = {name: m.lv_store_name || m.lv_store_id, branch_id: m.branch_id == null ? null : m.branch_id}; });
+      (rows("SELECT lv_name, product_id FROM lv_alias") || []).forEach(function(a){ lv.alias[String(a.lv_name).trim().toLowerCase()] = a.product_id; });
+      (rows("SELECT lv_name, created_at FROM lv_ignore") || []).forEach(function(g){ lv.ignore[g.lv_name] = g.created_at || now(); });
+      (rows("SELECT lv_name, product_id, qty FROM lv_group_items") || []).forEach(function(g){
+        var k = String(g.lv_name).trim().toLowerCase(); (lv.groups[k] = lv.groups[k] || {name: g.lv_name, items: []}).items.push({product_id: g.product_id, qty: g.qty});
+      });
+      (rows("SELECT rowid AS rid, receipt_key, receipt_type, store_id, state, note, created_at, applied_at FROM lv_receipts") || []).forEach(function(r){
+        lv.receipts[r.receipt_key] = {receipt_type: r.receipt_type, store_id: r.store_id || "", state: r.state, note: r.note || "", created_at: r.created_at, applied_at: r.applied_at, order: r.rid}; nlv++;
+      });
+      (rows("SELECT receipt_key, product_id, branch_id, delta, sale_id FROM lv_lines") || []).forEach(function(l){ (lv.lines[l.receipt_key] = lv.lines[l.receipt_key] || []).push({product_id: l.product_id, branch_id: l.branch_id, delta: l.delta, sale_id: l.sale_id}); });
+      lv.issues = (rows("SELECT id, kind, receipt_key, item_name, detail, payload, created_at, resolved FROM lv_issues") || []).map(function(i){
+        var pl = null; try { pl = JSON.parse(i.payload || "null"); } catch(e){}
+        if(i.kind === "unmatched") pl = Array.isArray(pl) ? pl : pl ? [pl] : [];
+        return {id: i.id, kind: i.kind, receipt_key: i.receipt_key, item_name: i.item_name || "", detail: i.detail || "", payload: pl, created_at: i.created_at, resolved: !!i.resolved};
+      });
+      (rows("SELECT customer_id, name, place, phone, updated_at FROM lv_customers") || []).forEach(function(c){ lv.customers[c.customer_id] = {name: c.name, place: c.place || "", phone: c.phone || "", updated_at: c.updated_at}; });
+      (rows("SELECT account_id, pos_id, name, store_name, activated, synced_at FROM lv_pos") || []).forEach(function(p){ lv.pos.push({account_id: p.account_id, pos_id: p.pos_id, name: p.name, store_name: p.store_name || "", activated: !!p.activated, synced_at: p.synced_at}); });
+      lv.settings = {enabled: set.lv_enabled === "1", start_from: set.lv_start_from || "", last_sync: set.lv_last_sync || "", last_ok: set.lv_last_ok || "", last_error: set.lv_last_error || ""};
+      lv.accounts = (S.lv && S.lv.accounts) || [];
+      d.lv = lv;
+      d.seq = Object.assign(d.seq || {}, {lv_issues: lv.issues.reduce(function(m, i){ return Math.max(m, i.id); }, 0), lv_receipts: nlv ? Object.keys(lv.receipts).reduce(function(m, k){ return Math.max(m, lv.receipts[k].order || 0); }, 0) : 0});
       db.close();
       if(!d.branches.length) d.branches = emptyState().branches;
       var keepAuth = S.auth;
@@ -2038,7 +2638,8 @@ function importSqlite(file){
                d.sales.length + " sales, " + d.transfers.length + " transfers, " + d.returns.length + " returns" +
                (auth ? ", " + auth.users.length + " user account(s) with their Raspberry Pi passwords" +
                        (unsupported ? " (" + unsupported + " need a new password from an administrator)" : "") +
-                       ". Make a recovery code in Settings." : ".");
+                       ". Make a recovery code in Settings." : ".") +
+               (nlv || Object.keys(lv.store_map).length ? " Loyverse: " + nlv + " receipts and the store matching were copied; load loyverse_config.json on the Loyverse page to reconnect the accounts." : "");
       });
     });
 }
@@ -2060,6 +2661,7 @@ function importSqlite(file){
     if(!d) return save();
   }).then(function(){
     render();
+    lvSchedule();
     // Another tab of this file changed the data: reload it (unless you are typing)
     if(channel) channel.onmessage = function(){
       IDB.get().then(function(d){ if(d){ S = normalize(d); if(!busy()) render(); } });
