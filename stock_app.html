@@ -1,0 +1,2071 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Stock Manager</title>
+<!--
+  Stock Manager – single-file HTML version of stock_app.py
+  ---------------------------------------------------------
+  Open this file in any modern browser (phone or PC). No server, no install.
+  Data is saved in this browser on this device (IndexedDB).
+  Use "Backup & Data" to download a backup or move the data to another device.
+-->
+<style>
+:root{
+  --sb:230px;
+  --accent:#3157d5;
+  --bg:#f5f7fb;
+  --surf:#ffffff;
+  --txt:#0f172a;
+  --muted:#64748b;
+  --border:#e7eaf1;
+  --green:#16a34a;
+  --red:#dc2626;
+  --yellow:#ca8a04;
+  --shadow:0 5px 22px #1725540a;
+}
+*,*::before,*::after{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{font-family:system-ui,-apple-system,sans-serif;margin:0;background:var(--bg);color:var(--txt);display:flex;min-height:100vh}
+
+/* ─── Sidebar ─── */
+.sidebar{width:var(--sb);background:#ffffff;color:#334155;border-right:1px solid var(--border);display:flex;flex-direction:column;position:fixed;top:0;left:0;bottom:0;z-index:100;overflow-y:auto;transition:transform .25s}
+.sb-logo{padding:20px 16px 16px;border-bottom:1px solid var(--border)}
+.sb-logo h1{font-size:16px;font-weight:800;margin:0 0 3px;color:#172033;display:flex;align-items:center;gap:8px}
+.sb-logo .live{font-size:11px;color:#16a34a;font-weight:500;display:inline-block}
+.sb-nav{flex:1;padding:10px 8px;display:flex;flex-direction:column;gap:1px;overflow-y:auto}
+.sb-nav a{display:flex;align-items:center;gap:9px;padding:10px 12px;border-radius:9px;color:#64748b;text-decoration:none;font-size:13.5px;font-weight:500;transition:background .12s,color .12s;white-space:nowrap}
+.sb-nav a:hover{background:#f1f5f9;color:#172033}
+.sb-nav a.cur{background:#eaf0ff;color:#2449bd;font-weight:700}
+.sb-sep{height:1px;background:var(--border);margin:9px 4px}
+
+/* ─── Main wrapper ─── */
+.wrapper{flex:1;margin-left:var(--sb);display:flex;flex-direction:column;min-width:0}
+.topbar{background:rgba(255,255,255,.94);border-bottom:1px solid var(--border);padding:14px 22px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:50;box-shadow:0 1px 4px #00000008}
+.topbar-title{font-size:16px;font-weight:700;color:var(--txt);flex:1}
+.menu-btn{display:none;background:none;border:1.5px solid var(--border);border-radius:7px;padding:6px 10px;font-size:18px;cursor:pointer;color:var(--txt);line-height:1}
+main{flex:1;padding:26px 28px;width:100%;max-width:1500px}
+
+/* ─── Cards ─── */
+.card{background:var(--surf);border-radius:14px;padding:21px 22px;margin-bottom:20px;border:1px solid var(--border);box-shadow:var(--shadow)}
+h2{margin:0 0 16px;font-size:15px;font-weight:700;color:var(--txt);display:flex;align-items:center;gap:7px}
+
+/* ─── KPI grid ─── */
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(158px,1fr));gap:14px;margin-bottom:20px}
+.bcard{background:var(--surf);border-radius:14px;padding:18px 17px;border:1px solid var(--border);box-shadow:var(--shadow);position:relative;overflow:hidden}
+.bcard::after{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:#3157d5}
+.bcard b{display:block;font-size:11px;font-weight:700;color:var(--muted);margin-bottom:10px;text-transform:uppercase;letter-spacing:.05em}
+.bcard span{font-size:12px;color:var(--muted);display:block;margin-top:2px;line-height:1.5}
+
+/* ─── Tables ─── */
+table{width:100%;border-collapse:collapse;font-size:14px}
+th,td{padding:10px 10px;border-bottom:1px solid var(--border);text-align:left;vertical-align:middle}
+th{color:var(--muted);font-weight:600;font-size:11.5px;text-transform:uppercase;letter-spacing:.05em;background:#f8fafc}
+tbody tr:hover{background:#fafbff}
+tbody tr:last-child td{border-bottom:none}
+td.n,th.n{text-align:right}
+.scroll{overflow-x:auto;border-radius:12px;border:1px solid var(--border)}
+.sbb th:first-child,.sbb td:first-child{position:sticky;left:0;z-index:2;background:#fff;box-shadow:2px 0 0 var(--border);min-width:90px}
+.sbb th:last-child,.sbb td:last-child{position:sticky;right:0;z-index:2;background:#fff;box-shadow:-2px 0 0 var(--border)}
+.sbb th:first-child,.sbb th:last-child{background:#f8fafc}
+@media(max-width:600px){.sbb{font-size:13px}.sbb th,.sbb td{padding:8px 5px}.sbb th:not(:first-child):not(:last-child),.sbb td:not(:first-child):not(:last-child){min-width:64px}}
+
+/* ─── Form elements ─── */
+input,select,button,textarea{font-size:15px;padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-family:inherit;outline:none;transition:border-color .15s,box-shadow .15s;background:#fff;color:var(--txt)}
+input:focus,select:focus,textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px #2563eb1a}
+button{background:var(--accent);color:#fff;border:0;cursor:pointer;font-weight:600;transition:opacity .15s,transform .08s}
+button:hover{opacity:.88}
+button:active{transform:scale(.98)}
+button:disabled{opacity:.6;cursor:default}
+button.out{background:var(--red)}
+button.in{background:var(--green)}
+button.del{background:#94a3b8;padding:5px 10px;font-size:12px}
+button.mini{padding:6px 10px;font-size:13px;background:#16a34a}
+.row{display:flex;gap:8px;flex-wrap:wrap}
+.row>*{flex:1;min-width:110px}
+a{color:#2563eb}
+
+/* ─── Flash messages ─── */
+.flash{padding:12px 16px;border-radius:10px;margin-bottom:14px;font-size:14px;font-weight:500;background:#dbeafe;color:#1e40af;border:1px solid #bfdbfe;display:flex;align-items:flex-start;gap:8px}
+.flash::before{content:'ℹ';font-size:16px;flex-shrink:0}
+.flash.error{background:#fee2e2;color:#991b1b;border-color:#fecaca}
+.flash.error::before{content:'⚠'}
+
+/* ─── Tags ─── */
+.low{color:var(--red);font-weight:700}
+.zero{color:#9ca3af}
+.tag{font-size:11.5px;padding:3px 10px;border-radius:99px;color:#fff;font-weight:600;display:inline-block}
+.tag.IN{background:var(--green)}.tag.OUT{background:var(--red)}
+.tag.PAID{background:var(--green)}.tag.FREE{background:#eab308;color:#111}.tag.CREDIT{background:var(--red)}
+.g{color:var(--green);font-weight:600}.r{color:var(--red);font-weight:600}
+small{color:var(--muted);font-size:12px}
+
+/* ─── Steps & misc ─── */
+.step{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin:18px 0 8px}
+.step:first-of-type{margin-top:0}
+.qtyrow{display:flex;gap:8px;align-items:stretch}
+.qtyrow button{flex:0 0 52px;font-size:22px;background:#e2e8f0;color:var(--txt)}
+.qtyrow input{flex:1;text-align:center;font-size:20px;font-weight:700;min-width:0}
+.hint{font-size:13px;color:var(--muted)}
+.errbox{background:#fee2e2;color:#991b1b;padding:12px 14px;border-radius:9px;margin-top:10px;display:none;font-size:14px;border:1px solid #fecaca}
+.big{width:100%;padding:14px;font-size:17px;font-weight:600;margin-top:14px}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
+.chip{padding:6px 12px;border-radius:99px;background:#e5e7eb;color:#374151;text-decoration:none;font-size:13px;cursor:pointer}
+.chip.on{background:#1f2937;color:#fff}
+details summary{cursor:pointer;color:#2563eb;font-size:14px;margin-bottom:8px}
+.route{display:grid;grid-template-columns:1fr auto 1fr;gap:8px;align-items:end}
+.route .arrow{font-size:24px;color:#6b7280;padding-bottom:6px}
+.route label{display:block;font-size:12px;color:#6b7280;margin-bottom:4px}
+.route select{width:100%}
+.route>div{min-width:0}
+.paygrid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+.paygrid input{position:absolute;opacity:0;pointer-events:none}
+.paygrid label{display:block;border:2px solid #d1d5db;border-radius:10px;padding:14px 4px;text-align:center;cursor:pointer;font-weight:600;font-size:15px;background:#fff;user-select:none}
+.paygrid small{display:block;font-weight:400;font-size:11px;margin-top:2px}
+#pFREE:checked + label{border-color:#ca8a04;background:#fef9c3;color:#713f12}
+#pCREDIT:checked + label{border-color:#dc2626;background:#fee2e2;color:#991b1b}
+
+/* ─── Product picker tiles ─── */
+.psearch{width:100%;margin-bottom:10px}
+.pgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(112px,1fr));gap:8px}
+.ptile{position:relative;display:flex;flex-direction:column;gap:3px;text-align:left;background:var(--surf);color:var(--txt);border:2px solid var(--border);border-radius:12px;padding:10px;min-height:70px;cursor:pointer;font-size:14px;line-height:1.2;font-weight:400;transition:border-color .12s,box-shadow .12s}
+.ptile:hover{box-shadow:0 2px 8px #0001;opacity:1}
+.ptile .pn{font-weight:600;overflow-wrap:anywhere;padding-right:18px}
+.ptile .pimg{width:100%;height:64px;object-fit:cover;border-radius:8px;background:#f1f5f9}
+.pthumb{width:48px;height:48px;object-fit:cover;border-radius:8px;background:#f1f5f9;display:block}
+.pnone{width:48px;height:48px;border-radius:8px;background:#f1f5f9;color:#9ca3af;display:flex;align-items:center;justify-content:center;font-size:20px}
+.photobtn{display:inline-block;cursor:pointer;background:#e2e8f0;color:var(--txt);border-radius:8px;padding:6px 10px;font-size:13px;white-space:nowrap}
+.ptile .ps{font-size:12px;color:var(--green)}
+.ptile.zero .ps{color:var(--red)}
+.ptile.none{opacity:.45}
+.ptile.none .ps{color:var(--red)}
+.ptile.sel{border-color:var(--accent);background:#eff6ff}
+.ptile .pq{position:absolute;top:6px;right:6px;min-width:22px;height:22px;border-radius:99px;background:var(--accent);color:#fff;font-size:12px;font-weight:700;display:none;align-items:center;justify-content:center;padding:0 6px}
+.ptile.sel .pq{display:flex}
+.cart{margin-top:14px}
+.cartempty{padding:16px;text-align:center;color:var(--muted);font-size:13px;border:2px dashed var(--border);border-radius:10px}
+.line{border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:8px;background:#f8fafc}
+.line .qtyrow .rm{flex:0 0 44px;background:#fee2e2;color:#991b1b;font-size:16px}
+
+/* ─── Stock dashboard ─── */
+.shop-dashboard-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:2px 0 16px}
+.shop-dashboard-head h1{font-size:25px;line-height:1.2;margin:0;color:#172033}
+.shop-dashboard-head p{margin:6px 0 0;color:#64748b;font-size:13px}
+.shop-quick-actions{display:flex;gap:9px;flex-wrap:wrap;margin:0 0 18px}
+.shop-quick-actions a{display:inline-flex;align-items:center;justify-content:center;min-height:46px;padding:10px 16px;border-radius:10px;text-decoration:none;font-size:14px;font-weight:800;background:#3157d5;color:#fff}
+.shop-quick-actions a.secondary{background:#e8edf7;color:#24324b}
+.shop-branch-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(205px,1fr));gap:12px;margin-bottom:18px}
+.shop-branch-card{display:block;position:relative;background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:16px;text-decoration:none;color:#172033;box-shadow:0 2px 8px #0f172a08;min-width:0;cursor:pointer}
+.shop-branch-card:active{transform:scale(.99)}
+.shop-branch-name{font-size:13px;font-weight:800;color:#475569;text-transform:uppercase;letter-spacing:.04em}
+.shop-branch-number{font-size:34px;line-height:1.1;font-weight:900;margin:9px 0 2px;color:#172033;font-variant-numeric:tabular-nums}
+.shop-branch-caption{font-size:12px;color:#64748b}
+.shop-branch-totals{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:13px;padding-top:11px;border-top:1px solid #edf0f5}
+.shop-branch-totals span{display:block;font-size:11px;color:#64748b}
+.shop-branch-totals strong{display:block;font-size:17px;margin-top:2px}
+.shop-low-alert{display:inline-block;margin-top:10px;padding:5px 8px;border-radius:7px;background:#fff1f2;color:#be123c;font-size:12px;font-weight:800}
+.shop-movement-card{border-radius:14px;padding:18px;border:1px solid #e2e8f0;background:#fff;box-shadow:0 2px 8px #0f172a08;margin-bottom:18px}
+.shop-movement-card h2{font-size:18px;margin-bottom:5px}
+.shop-movement-hint{font-size:13px;color:#64748b;margin:0 0 10px}
+.shop-movement-buttons{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px}
+.shop-movement-buttons button{min-height:58px;border-radius:12px;font-size:17px;font-weight:900}
+.shop-movement-buttons button.in{background:#15803d}
+.shop-movement-buttons button.out{background:#b91c1c}
+.stockout-extra{margin-top:14px;padding:16px;border:1px solid #fecaca;border-left:4px solid #dc2626;border-radius:12px;background:#fff8f7}
+.stock-photo-picker{display:inline-flex;align-items:center;gap:8px;padding:10px 14px;border:1px dashed #94a3b8;border-radius:9px;background:#fff;color:#334155;font-weight:600;cursor:pointer}
+.stock-photo-picker:hover{border-color:var(--accent);background:#f8faff}
+@media(max-width:600px){
+  .shop-dashboard-head h1{font-size:22px}
+  .shop-quick-actions{display:grid;grid-template-columns:1fr 1fr}
+  .shop-quick-actions a{min-height:50px;padding:9px 8px;text-align:center}
+  .shop-branch-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+  .shop-branch-card{padding:12px;border-radius:12px}
+  .shop-branch-number{font-size:28px}
+  .shop-branch-totals strong{font-size:15px}
+  .shop-movement-card{padding:14px}
+  .shop-movement-buttons button{min-height:62px;font-size:16px}
+}
+
+/* ─── Sales by branch ─── */
+.bc-wrap{overflow-x:auto}
+.bc-tbl{width:100%;border-collapse:collapse;font-size:14px;min-width:480px}
+.bc-bar-bg{background:#e2e8f0;border-radius:99px;height:12px;min-width:60px;overflow:hidden}
+.bc-bar-fill{height:12px;border-radius:99px;background:linear-gradient(90deg,#2563eb,#7c3aed)}
+.bc-dl{display:inline-flex;align-items:center;gap:5px;background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600;text-decoration:none;white-space:nowrap}
+.bc-badge{display:inline-block;padding:2px 8px;border-radius:99px;font-size:11px;font-weight:600}
+.bc-badge.credit{background:#fee2e2;color:#991b1b}
+.bc-badge.free{background:#fef9c3;color:#713f12}
+.bc-rank{display:inline-flex;width:22px;height:22px;border-radius:50%;background:#f1f5f9;color:var(--muted);font-size:11px;font-weight:700;align-items:center;justify-content:center}
+.bc-rank.top{background:#fef9c3;color:#713f12}
+
+/* ─── Branch dashboard ─── */
+.bdh{border-radius:18px;padding:18px 18px 16px;color:#fff;background:linear-gradient(135deg,#111827,#374151 60%,#4f46e5);margin-bottom:14px}
+.bdh h2{margin:0;font-size:22px;color:#fff}
+.bdh p{margin:2px 0 12px;color:#c7d2fe;font-size:13px}
+.bds{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px}
+.bds div{background:#ffffff1f;border-radius:12px;padding:9px 12px}
+.bds b{display:block;font-size:22px;line-height:1.1}
+.bds span{font-size:12px;color:#e0e7ff}
+.bdgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(310px,1fr));gap:14px}
+@media(max-width:400px){.bdgrid{grid-template-columns:1fr}}
+.bdc{background:#fff;border-radius:18px;box-shadow:0 2px 10px #0000001a;overflow:hidden;display:flex;flex-direction:column}
+.bdc-top{display:flex;gap:12px;align-items:center;padding:14px;color:#fff}
+.bdav{flex:0 0 46px;width:46px;height:46px;border-radius:14px;background:#ffffff33;display:flex;align-items:center;justify-content:center;font-size:21px;font-weight:700}
+.bdc-top h3{margin:0;font-size:17px;color:#fff}
+.bdc-top small{color:#ffffffcc}
+.bdstats{display:grid;grid-template-columns:repeat(3,1fr);border-bottom:1px solid #eef0f3}
+.bdstats div{padding:9px 6px;text-align:center}
+.bdstats b{display:block;font-size:17px}
+.bdstats span{font-size:11px;color:#6b7280}
+.bdstats .o b{color:#1d4ed8}.bdstats .i b{color:#15803d}.bdstats .r b{color:#b91c1c}
+.bdlist{padding:6px 10px;flex:1}
+.bdrow{display:flex;gap:10px;align-items:center;padding:8px 4px;border-bottom:1px solid #f3f4f6}
+.bdrow:last-child{border-bottom:0}
+.bdimg{flex:0 0 46px;width:46px;height:46px;border-radius:12px;object-fit:cover;background:#f3f4f6;display:flex;align-items:center;justify-content:center;font-size:20px}
+.bdmid{flex:1;min-width:0}
+.bdmid .nm{font-weight:600;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bdmid .mt{font-size:12px;color:#6b7280;margin-top:1px}
+.pill{display:inline-block;font-size:11px;font-weight:700;border-radius:99px;padding:2px 8px;white-space:nowrap}
+.pill.out{background:#dbeafe;color:#1d4ed8}.pill.in{background:#dcfce7;color:#166534}.pill.ret{background:#fee2e2;color:#991b1b;margin-left:4px}
+.bdq{text-align:right;flex:0 0 auto}
+.bdq b{font-size:16px}.bdq span{display:block;font-size:11px;color:#6b7280}
+.bdempty{padding:26px 10px;text-align:center;color:#9ca3af;font-size:14px}
+.bdfoot{display:block;text-align:center;padding:11px;font-weight:600;font-size:14px;text-decoration:none;background:#f9fafb;color:#4338ca;border-top:1px solid #eef0f3}
+.bdfoot:hover{background:#eef2ff}
+.bctabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
+.bctabs a{padding:7px 14px;border-radius:99px;font-size:14px;text-decoration:none;background:#e5e7eb;color:#374151}
+.bctabs a.on{background:#1f2937;color:#fff}
+.chat{background:#f3f4f6;border-radius:16px;padding:12px;max-height:70vh;overflow-y:auto;display:flex;flex-direction:column;gap:10px}
+.day{align-self:center;font-size:12px;color:#6b7280;background:#e5e7eb;border-radius:99px;padding:3px 12px;margin:6px 0}
+.bub{max-width:86%;padding:10px 12px;border-radius:16px;font-size:14px;box-shadow:0 1px 2px #0002;word-wrap:break-word}
+.bub.out{align-self:flex-end;background:#dbeafe;border-bottom-right-radius:4px}
+.bub.in{align-self:flex-start;background:#fff;border-bottom-left-radius:4px}
+.bub .who{font-size:12px;font-weight:700;color:#4b5563;margin-bottom:6px}
+.bub .it{display:flex;gap:10px;align-items:center;padding:4px 0}
+.bub .it .bdimg{flex-basis:42px;width:42px;height:42px;border-radius:10px}
+.bub .it .nm{font-weight:600}
+.bub .it .q{font-size:12px;color:#4b5563}
+.bub .why{font-size:13px;color:#7f1d1d;margin-top:4px}
+.bub .nt{font-size:13px;color:#4b5563;margin-top:2px}
+.bub .when{font-size:11px;color:#6b7280;text-align:right;margin-top:4px}
+.chatempty{text-align:center;color:#6b7280;padding:30px 0}
+
+/* ─── Login / setup screens ─── */
+#authscreen{position:fixed;inset:0;z-index:200;background:#f3f4f6;overflow-y:auto;padding:16px;align-items:center;justify-content:center}
+.abox{background:#fff;border-radius:14px;box-shadow:0 2px 12px #0002;padding:24px;width:100%;max-width:380px;margin:auto}
+.abox h1{font-size:20px;margin:0 0 6px}
+.abox p{color:#4b5563;font-size:14px;margin:0 0 14px}
+.abox label{display:block;font-size:13px;color:#374151;margin:12px 0 4px;font-weight:600}
+.abox input{width:100%;font-size:16px;padding:12px;border:1px solid #d1d5db;border-radius:8px}
+.abox button{width:100%;margin-top:18px;font-size:17px;font-weight:600;padding:13px;border-radius:8px}
+.abox .aerr{background:#fee2e2;color:#991b1b;padding:10px;border-radius:8px;font-size:14px;margin-bottom:10px}
+.abox .anote{background:#fef3c7;color:#92400e;padding:10px;border-radius:8px;font-size:13px;margin-bottom:12px}
+.abox a{color:#2563eb;font-size:14px}
+.abox code{font-size:18px;font-weight:800;letter-spacing:.06em;background:#f1f5f9;padding:8px 10px;border-radius:8px;display:block;text-align:center;margin:8px 0;word-break:break-all}
+.sb-user{font-size:12px;color:#64748b;margin-top:6px}
+.sb-logout a{color:#dc2626 !important}
+.page-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:7px;margin:10px 0}
+.page-grid label{display:flex;align-items:center;gap:7px;padding:7px 8px;border:1px solid var(--border);border-radius:6px;font-size:14px}
+.page-grid input{width:auto;padding:0}
+
+/* ─── Responsive ─── */
+.overlay{display:none;position:fixed;inset:0;background:#0009;z-index:99}
+@media(max-width:840px){
+  .sidebar{transform:translateX(-100%)}
+  .sidebar.open{transform:translateX(0)}
+  .overlay.open{display:block}
+  .wrapper{margin-left:0}
+  .menu-btn{display:flex}
+  main{padding:14px 12px}
+  .topbar{padding:12px 14px}
+  .grid{grid-template-columns:repeat(2,1fr)}
+}
+</style>
+</head>
+<body>
+<div class="overlay" id="overlay"></div>
+
+<nav class="sidebar" id="sidebar">
+  <div class="sb-logo">
+    <h1>&#128230; Stock Manager</h1>
+    <span id="live" class="live">&#11044; saved on this device</span>
+  </div>
+  <div class="sb-nav" id="sbnav"></div>
+</nav>
+
+<div id="authscreen" style="display:none"></div>
+
+<div class="wrapper">
+  <div class="topbar">
+    <button class="menu-btn" id="menuBtn" aria-label="Menu">&#9776;</button>
+    <span class="topbar-title" id="title">&#128230; Stock Manager</span>
+  </div>
+  <main id="main"><p>Loading…</p></main>
+</div>
+
+<script>
+"use strict";
+/* =====================================================================
+   Storage: whole app state lives in IndexedDB (falls back to localStorage)
+   ===================================================================== */
+var DEFAULT_BRANCHES = ["Branch 1", "Branch 2", "Branch 3", "Branch 4"];
+var MAX_PHOTO_BYTES = 8 * 1024 * 1024;
+var S = null;            // app state
+var FLASH = [];          // messages shown on next render
+
+function emptyState(){
+  var s = {version: 1, seq: {}, branches: [], products: [], stock: {}, transactions: [],
+           sales: [], transfers: [], returns: [], photos: {}, auth: null};
+  DEFAULT_BRANCHES.forEach(function(n){ s.branches.push({id: nextIdIn(s, "branches"), name: n}); });
+  return s;
+}
+function nextIdIn(s, table){ s.seq[table] = (s.seq[table] || 0) + 1; return s.seq[table]; }
+function nextId(table){ return nextIdIn(S, table); }
+
+var IDB = {
+  db: null,
+  open: function(){
+    return new Promise(function(ok){
+      try {
+        var rq = indexedDB.open("stock_manager", 1);
+        rq.onupgradeneeded = function(){ rq.result.createObjectStore("kv"); };
+        rq.onsuccess = function(){ IDB.db = rq.result; ok(true); };
+        rq.onerror = function(){ ok(false); };
+      } catch(e){ ok(false); }
+    });
+  },
+  get: function(){
+    return new Promise(function(ok){
+      if(!IDB.db){ try { ok(JSON.parse(localStorage.getItem("stock_manager") || "null")); } catch(e){ ok(null); } return; }
+      var rq = IDB.db.transaction("kv").objectStore("kv").get("state");
+      rq.onsuccess = function(){ ok(rq.result || null); };
+      rq.onerror = function(){ ok(null); };
+    });
+  },
+  put: function(v){
+    return new Promise(function(ok, fail){
+      if(!IDB.db){ try { localStorage.setItem("stock_manager", JSON.stringify(v)); ok(); } catch(e){ fail(e); } return; }
+      var tx = IDB.db.transaction("kv", "readwrite");
+      tx.objectStore("kv").put(v, "state");
+      tx.oncomplete = function(){ ok(); };
+      tx.onerror = function(){ fail(tx.error); };
+    });
+  }
+};
+var channel = null;
+try { channel = new BroadcastChannel("stock_manager"); } catch(e){}
+
+function save(){
+  return IDB.put(S).then(function(){
+    if(channel) channel.postMessage("changed");
+  }).catch(function(e){
+    alert("Could not save data on this device: " + (e && e.message ? e.message : e) +
+          "\nTry removing some photos, or download a backup.");
+  });
+}
+
+/* =====================================================================
+   Helpers (same rules as the Python app)
+   ===================================================================== */
+function pad(n){ return (n < 10 ? "0" : "") + n; }
+function dateStr(d){ return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()); }
+function now(){ var d = new Date(); return dateStr(d) + " " + pad(d.getHours()) + ":" + pad(d.getMinutes()) + ":" + pad(d.getSeconds()); }
+function fmt(n){ n = parseFloat(n) || 0; return Number.isInteger(n) ? n : Math.round(n * 100) / 100; }
+function esc(t){ return String(t == null ? "" : t).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;"); }
+function $(id){ return document.getElementById(id); }
+function flash(msg, cat){ FLASH.push({m: msg, cat: cat || ""}); }
+function clean(t, max){ t = String(t || "").split(/\s+/).filter(Boolean).join(" "); return max ? t.slice(0, max) : t; }
+
+function branches(){ return S.branches.slice().sort(function(a,b){ return a.id - b.id; }); }
+function products(){ return S.products.slice().sort(function(a,b){ return a.name.toLowerCase() < b.name.toLowerCase() ? -1 : a.name.toLowerCase() > b.name.toLowerCase() ? 1 : 0; }); }
+function branchById(id){ id = +id; return S.branches.find(function(b){ return b.id === id; }); }
+function productById(id){ id = +id; return S.products.find(function(p){ return p.id === id; }); }
+function bname(id){ var b = branchById(id); return b ? b.name : "?"; }
+function getQty(pid, bid){ return S.stock[bid + ":" + pid] || 0; }
+function addQty(pid, bid, delta){ var k = bid + ":" + pid; S.stock[k] = Math.round(((S.stock[k] || 0) + delta) * 1e6) / 1e6; }
+function addTx(pid, bid, kind, qty, note, stamp, photo){
+  S.transactions.push({id: nextId("transactions"), product_id: +pid, branch_id: +bid, kind: kind, qty: qty,
+                       note: note || "", created_at: stamp, photo: photo || null});
+}
+function photoSrc(id){ return id ? (S.photos[id] || "") : ""; }
+function storePhoto(dataUrl){ if(!dataUrl) return null; var id = "ph" + nextId("photos"); S.photos[id] = dataUrl; return id; }
+function dropUnusedPhoto(id){
+  if(!id) return;
+  var used = S.products.some(function(p){ return p.photo === id; }) ||
+             S.transactions.some(function(t){ return t.photo === id; });
+  if(!used) delete S.photos[id];
+}
+
+function stockMap(){
+  var m = {};
+  Object.keys(S.stock).forEach(function(k){
+    var p = k.split(":"); (m[p[0]] = m[p[0]] || {})[p[1]] = fmt(S.stock[k]);
+  });
+  return m;
+}
+function unitMap(){ var m = {}; S.products.forEach(function(p){ m[p.id] = p.unit; }); return m; }
+function branchMap(){ var m = {}; S.branches.forEach(function(b){ m[b.id] = b.name; }); return m; }
+function pickerProducts(){ return products().map(function(p){ return {id: p.id, name: p.name, photo: photoSrc(p.photo)}; }); }
+function branchOptions(sel){
+  return branches().map(function(b){ return '<option value="' + b.id + '"' + (b.id === +sel ? " selected" : "") + ">" + esc(b.name) + "</option>"; }).join("");
+}
+
+/* Collect cart lines: same product twice is added together */
+function collectLines(items){
+  var lines = {}, order = [];
+  for(var i = 0; i < items.length; i++){
+    var q = parseFloat(items[i].qty);
+    if(!(q > 0)) return {error: "Quantities must be more than zero."};
+    if(!(items[i].pid in lines)){ lines[items[i].pid] = 0; order.push(items[i].pid); }
+    lines[items[i].pid] += q;
+  }
+  if(!order.length) return {error: "Tap at least one product and enter how many."};
+  return {lines: lines, order: order};
+}
+function itemsText(L){
+  return L.order.map(function(pid){ var p = productById(pid); return p.name + " " + fmt(L.lines[pid]) + " " + p.unit; }).join(", ");
+}
+function shortList(L, bid){
+  var short = [];
+  L.order.forEach(function(pid){
+    var p = productById(pid), have = getQty(pid, bid);
+    if(L.lines[pid] > have + 1e-9) short.push(p.name + " (only " + fmt(have) + " " + p.unit + " left)");
+  });
+  return short;
+}
+
+/* CSV download */
+function csvCell(v){ v = v == null ? "" : String(v); return /[",\r\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; }
+function downloadCSV(filename, header, rows){
+  var text = "﻿" + [header].concat(rows).map(function(r){ return r.map(csvCell).join(","); }).join("\r\n") + "\r\n";
+  downloadBlob(filename, new Blob([text], {type: "text/csv;charset=utf-8"}));
+}
+function downloadBlob(filename, blob){
+  var a = document.createElement("a");
+  a.href = URL.createObjectURL(blob); a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(function(){ URL.revokeObjectURL(a.href); }, 2000);
+}
+
+/* Shrink big phone photos before saving (max 900px JPEG, like the Python app's uploader) */
+function readPhoto(file){
+  return new Promise(function(ok, fail){
+    if(!file) { ok(null); return; }
+    if(!file.type || file.type.indexOf("image/") !== 0){ fail("That file is not a photo. Use a JPG, PNG, WEBP or GIF picture."); return; }
+    if(file.size > MAX_PHOTO_BYTES){ fail("The photo is too big (maximum 8 MB)."); return; }
+    var url = URL.createObjectURL(file), img = new Image();
+    img.onload = function(){
+      var m = 900, w = img.width, h = img.height, k = Math.min(1, m / Math.max(w, h));
+      var c = document.createElement("canvas"); c.width = Math.round(w * k); c.height = Math.round(h * k);
+      var cx = c.getContext("2d"); cx.fillStyle = "#fff"; cx.fillRect(0, 0, c.width, c.height);
+      cx.drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(url);
+      ok(c.toDataURL("image/jpeg", 0.82));
+    };
+    img.onerror = function(){ URL.revokeObjectURL(url); fail("That file is not a photo. Use a JPG, PNG, WEBP or GIF picture."); };
+    img.src = url;
+  });
+}
+
+function niceWhen(stamp, withTime){
+  if(withTime === undefined) withTime = true;
+  var m = /^(\d{4})-(\d\d)-(\d\d) (\d\d):(\d\d)/.exec(stamp || "");
+  if(!m) return stamp || "";
+  var d = new Date(+m[1], +m[2] - 1, +m[3]), t = new Date(), today = new Date(t.getFullYear(), t.getMonth(), t.getDate());
+  var diff = Math.round((today - d) / 86400000), day;
+  if(diff === 0) day = "Today";
+  else if(diff === 1) day = "Yesterday";
+  else day = m[3] + " " + ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][+m[2] - 1] + (+m[1] === t.getFullYear() ? "" : " " + m[1]);
+  return withTime ? day + ", " + m[4] + ":" + m[5] : day;
+}
+
+/* =====================================================================
+   Product picker (same as the Python app's tile picker)
+   ===================================================================== */
+function ProductPicker(o){
+  var tiles = {}, rows = {}, order = [], selected = "", names = {};
+  function A(pid){ return o.avail(String(pid)); }
+  function U(pid){ return (o.units && o.units[pid]) || ""; }
+  function qin(pid){ return rows[pid].querySelector("input[name=qty]"); }
+  function changed(){ if(o.onChange) o.onChange(); }
+  o.products.forEach(function(p){
+    var pid = String(p.id); names[pid] = p.name;
+    var b = document.createElement("button");
+    b.type = "button"; b.className = "ptile"; b.setAttribute("data-name", p.name.toLowerCase());
+    b.innerHTML = (p.photo ? '<img class="pimg" loading="lazy" alt="" src="' + esc(p.photo) + '">' : '') +
+      '<span class="pn">' + esc(p.name) + '</span><span class="ps"></span><span class="pq"></span>';
+    b.onclick = function(){ tap(pid); };
+    o.grid.appendChild(b); tiles[pid] = b;
+  });
+  function paint(){
+    Object.keys(tiles).forEach(function(pid){
+      var t = tiles[pid], a = A(pid), on = rows[pid] !== undefined;
+      t.querySelector(".ps").textContent = (a > 0 || o.allowZero) ? (a + " " + U(pid)) : "none left";
+      t.classList.toggle("sel", on);
+      t.classList.toggle("none", !o.allowZero && a <= 0);
+      t.classList.toggle("zero", o.allowZero && a <= 0);
+      t.querySelector(".pq").textContent = rows[pid] ? (parseFloat(qin(pid).value) || "") : "";
+    });
+    if(o.empty) o.empty.style.display = order.length === 0 ? "block" : "none";
+  }
+  function hintRow(pid){
+    var r = rows[pid], a = A(pid), h = r.querySelector(".ch"), q = qin(pid);
+    h.textContent = o.rowHint ? o.rowHint(pid) : ("In stock: " + a + " " + U(pid));
+    h.style.color = a > 0 ? "#166534" : "#dc2626";
+    if(a > 0 && !o.allowZero) q.max = a; else q.removeAttribute("max");
+  }
+  function removeRow(pid){
+    if(!rows[pid]) return;
+    rows[pid].remove(); delete rows[pid]; order = order.filter(function(x){ return x !== pid; });
+    paint(); changed();
+  }
+  function addRow(pid){
+    var r = document.createElement("div"); r.className = "line";
+    r.innerHTML = '<div style="display:flex;justify-content:space-between;gap:8px;margin-bottom:8px;align-items:baseline">' +
+      '<strong>' + esc(names[pid]) + '</strong><span class="ch hint"></span></div>' +
+      '<div class="qtyrow"><button type="button" class="qm" aria-label="Less">&#8722;</button>' +
+      '<input name="qty" type="number" step="any" min="0.01" inputmode="decimal">' +
+      '<button type="button" class="qp" aria-label="More">+</button>' +
+      '<button type="button" class="rm" aria-label="Remove">&#10005;</button></div>';
+    rows[pid] = r; order.push(pid); o.cart.appendChild(r);
+    var q = qin(pid);
+    r.querySelector(".qm").onclick = function(){
+      var v = Math.round(((parseFloat(q.value) || 0) - 1) * 100) / 100;
+      if(v <= 0) removeRow(pid); else { q.value = v; paint(); changed(); }
+    };
+    r.querySelector(".qp").onclick = function(){
+      var v = Math.round(((parseFloat(q.value) || 0) + 1) * 100) / 100, a = A(pid);
+      if(!o.allowZero && a > 0 && v > a) v = a;
+      q.value = v; paint(); changed();
+    };
+    r.querySelector(".rm").onclick = function(){ removeRow(pid); };
+    q.addEventListener("input", function(){ paint(); changed(); });
+    hintRow(pid);
+    return q;
+  }
+  function tap(pid){
+    var a = A(pid);
+    if(!o.allowZero && a <= 0){ if(o.notify) o.notify(names[pid] + " has none left here."); return; }
+    var capped = false;
+    if(!rows[pid]){ addRow(pid).value = 1; }
+    else {
+      var q = qin(pid), v = Math.round(((parseFloat(q.value) || 0) + 1) * 100) / 100;
+      if(!o.allowZero && v > a){ v = a; capped = true; }
+      q.value = v;
+    }
+    paint(); changed();
+    if(capped && o.notify) o.notify("Only " + a + " " + U(pid) + " of " + names[pid] + " available.");
+  }
+  if(o.search){
+    o.search.addEventListener("input", function(){
+      var k = o.search.value.trim().toLowerCase();
+      Object.keys(tiles).forEach(function(pid){
+        tiles[pid].style.display = (!k || tiles[pid].getAttribute("data-name").indexOf(k) !== -1) ? "" : "none";
+      });
+    });
+  }
+  paint();
+  return {
+    refresh: function(){ paint(); order.forEach(hintRow); },
+    items: function(){ return order.map(function(pid){ return {pid: pid, name: names[pid], qty: parseFloat(qin(pid).value) || 0}; }); }
+  };
+}
+
+/* =====================================================================
+   Router
+   ===================================================================== */
+var ROUTE = {path: "stock", args: {}};
+function parseHash(){
+  var h = location.hash.replace(/^#\/?/, ""), qi = h.indexOf("?"), path = qi < 0 ? h : h.slice(0, qi), args = {};
+  if(qi >= 0) new URLSearchParams(h.slice(qi + 1)).forEach(function(v, k){ args[k] = v; });
+  return {path: path || "stock", args: args};
+}
+function link(path, args){
+  var q = new URLSearchParams();
+  Object.keys(args || {}).forEach(function(k){ if(args[k] !== "" && args[k] != null) q.set(k, args[k]); });
+  var s = q.toString();
+  return "#/" + path + (s ? "?" + s : "");
+}
+function go(path, args){
+  var h = link(path, args);
+  if(location.hash === h) render(); else location.hash = h;
+}
+function render(){
+  ROUTE = parseHash();
+  if(!authGate()) return;
+  var key = ROUTE.path.split("/")[0];
+  if(!PAGES[key]){ key = "stock"; ROUTE.path = "stock"; }
+  var pk = PAGE_KEY[key];
+  if(!canOpenPage(pk)){
+    var first = firstAllowedPage();
+    if(!first){ logout(); return; }
+    flash("You do not have permission to open that page.", "error");
+    location.hash = "#/" + first; return;
+  }
+  if(SALES_PAGES.indexOf(pk) >= 0 && !salesUnlocked()){ showUnlock(); return; }
+  if(SALES_PAGES.indexOf(pk) >= 0) SESSION.sales_until = Date.now() + SALES_MINUTES * 60000, saveSession();
+  buildNav();
+  var page = PAGES[key];
+  var body = page.render(ROUTE.args, ROUTE.path);
+  var fl = FLASH.map(function(f){ return '<div class="flash ' + f.cat + '">' + esc(f.m) + "</div>"; }).join("");
+  FLASH = [];
+  $("main").innerHTML = fl + body;
+  document.title = page.title + " · Stock Manager";
+  document.querySelectorAll("#sidebar a[href^='#/']").forEach(function(a){
+    var h = a.getAttribute("href").slice(2);
+    a.classList.toggle("cur", ROUTE.path === h || ROUTE.path.indexOf(h + "/") === 0);
+  });
+  $("sidebar").classList.remove("open"); $("overlay").classList.remove("open");
+  if(page.mount) page.mount(ROUTE.args, ROUTE.path);
+  if(fl) window.scrollTo(0, 0);
+}
+function busy(){
+  var a = document.activeElement;
+  if(a && /^(INPUT|SELECT|TEXTAREA)$/.test(a.tagName)) return true;
+  return !!document.querySelector(".cart .line");
+}
+
+/* Shared form helpers */
+function errBox(id){
+  var el = $(id);
+  return {
+    show: function(m){ el.textContent = m; el.style.display = "block"; },
+    hide: function(){ el.style.display = "none"; }
+  };
+}
+function noProductsMsg(){ return '<p>No products yet. <a href="#/products">Add your products first.</a></p>'; }
+
+/* =====================================================================
+   Pages
+   ===================================================================== */
+var PAGES = {};
+
+/* ---------- Stock ---------- */
+PAGES.stock = {
+  title: "Stock",
+  render: function(args){
+    var brs = branches(), prods = products(), today = dateStr(new Date()) + " 00:00:00";
+    var sel = +args.branch || (brs[0] && brs[0].id);
+    var summary = {};
+    brs.forEach(function(b){ summary[b.id] = {units: 0, tin: 0, tout: 0, low: 0}; });
+    prods.forEach(function(p){ brs.forEach(function(b){
+      var q = getQty(p.id, b.id); summary[b.id].units += q;
+      if(p.low_limit > 0 && q <= p.low_limit) summary[b.id].low += 1;
+    }); });
+    S.transactions.forEach(function(t){
+      if(t.created_at >= today && summary[t.branch_id]) summary[t.branch_id][t.kind === "IN" ? "tin" : "tout"] += t.qty;
+    });
+    var h = '<div class="shop-dashboard-head"><div>' +
+      '<div style="font-size:11px;font-weight:800;letter-spacing:.09em;text-transform:uppercase;color:#64748b;margin-bottom:5px">Shop stock desk</div>' +
+      '<h1>Stock dashboard</h1><p>Quick stock updates and branch balances.</p></div></div>' +
+      '<div class="shop-quick-actions"><a href="#stock-in-out" id="jumpmove">＋ Update stock</a>' +
+      (canOpenPage("history") ? '<a class="secondary" href="#/history">View stock history</a>' : '') +
+      (canOpenPage("products") ? '<a class="secondary" href="#/products">＋ Products</a>' : '') + '</div>' +
+      '<div class="shop-branch-grid">' + brs.map(function(b){
+        var s = summary[b.id];
+        return '<div class="shop-branch-card" data-branch-id="' + b.id + '" role="button" tabindex="0" aria-label="Open Stock In / Out for ' + esc(b.name) + '">' +
+          '<div class="shop-branch-name">' + esc(b.name) + '</div>' +
+          '<div class="shop-branch-number">' + fmt(s.units) + '</div><div class="shop-branch-caption">Total units available</div>' +
+          '<div class="shop-branch-totals"><div><span>Today IN</span><strong class="g">+' + fmt(s.tin) + '</strong></div>' +
+          '<div><span>Today OUT</span><strong class="r">−' + fmt(s.tout) + '</strong></div></div>' +
+          (s.low ? '<span class="shop-low-alert">⚠ ' + s.low + ' low-stock item(s)</span>' : '') + '</div>';
+      }).join("") + '</div>';
+
+    h += '<div class="shop-movement-card" id="stock-in-out"><h2>Stock In / Out</h2>' +
+      '<p class="shop-movement-hint">Select a branch, tap products and enter quantities. Use the large buttons below to save.</p>';
+    if(!prods.length) h += noProductsMsg();
+    else h += '<div class="step">1 · Branch</div><select id="mb" style="width:100%">' + branchOptions(sel) + '</select>' +
+      '<div class="step">2 · Tap the products (tap again to add one more)</div>' +
+      '<input class="psearch" id="msearch" type="search" placeholder="Search product…" autocomplete="off">' +
+      '<div class="pgrid" id="mgrid"></div><div class="cart"><div class="cartempty" id="mempty">Tap a product above to add it</div><div id="mcart"></div></div>' +
+      '<div class="step">Note (optional)</div><input id="mnote" placeholder="Anything to remember" style="width:100%">' +
+      '<div id="reasonbox" class="stockout-extra" style="display:none">' +
+      '<div class="step" style="margin-top:0;color:#991b1b">Stock OUT remark <span style="color:#dc2626">* Required</span></div>' +
+      '<textarea id="mreason" rows="3" maxlength="200" placeholder="Why is this stock going out? e.g. Damaged, expired, missing, given away…" style="width:100%"></textarea>' +
+      '<div class="step" style="color:#334155">Photo evidence <span class="hint">· Optional</span></div>' +
+      '<label class="stock-photo-picker" for="stockoutphoto">📷 Take a photo or choose an image</label>' +
+      '<input type="file" id="stockoutphoto" accept="image/*" capture="environment" style="display:none">' +
+      '<div id="stockout-preview-wrap" style="display:none;margin-top:10px"><img id="stockout-preview" alt="Stock OUT photo preview" style="max-width:180px;max-height:180px;border-radius:10px;object-fit:cover;border:1px solid #cbd5e1">' +
+      '<button type="button" class="del" id="stockout-clear" style="display:block;margin-top:6px">Remove photo</button></div>' +
+      '<small>The photo will be attached to each product entry in this Stock OUT operation.</small></div>' +
+      '<div class="errbox" id="merr"></div>' +
+      '<div class="shop-movement-buttons"><button type="button" class="in" id="bin" data-kind="IN">＋ Stock IN</button>' +
+      '<button type="button" class="out" id="bout" data-kind="OUT">− Stock OUT</button></div>';
+    h += '</div>';
+
+    h += '<div class="card"><h2>Stock by Branch</h2><div class="row" style="margin-bottom:10px"><input id="sbbq" type="search" placeholder="Search product name"></div>' +
+      '<div class="scroll"><table class="sbb"><thead><tr><th>Product</th>' + brs.map(function(b){ return '<th class="n">' + esc(b.name) + '</th>'; }).join("") +
+      '<th class="n">Total</th></tr></thead><tbody id="sbbbody">' +
+      (prods.length ? prods.map(function(p){
+        var tot = 0, cells = brs.map(function(b){
+          var c = getQty(p.id, b.id); tot += c;
+          return '<td class="n ' + (p.low_limit > 0 && c <= p.low_limit ? "low" : (c === 0 ? "zero" : "")) + '">' + fmt(c) + '</td>';
+        }).join("");
+        return '<tr data-name="' + esc(p.name.toLowerCase()) + '"><td>' + esc(p.name) + '<br><small>' + esc(p.unit) + '</small></td>' + cells + '<td class="n"><strong>' + fmt(tot) + '</strong></td></tr>';
+      }).join("") : '<tr><td colspan="' + (brs.length + 2) + '">No products found.</td></tr>') +
+      '</tbody></table></div><small>Red = at or below the product\'s low-stock level.</small></div>';
+    return h;
+  },
+  mount: function(){
+    $("sbbq").addEventListener("input", function(){
+      var k = this.value.trim().toLowerCase();
+      document.querySelectorAll("#sbbbody tr[data-name]").forEach(function(tr){ tr.style.display = !k || tr.getAttribute("data-name").indexOf(k) !== -1 ? "" : "none"; });
+    });
+    $("jumpmove").onclick = function(e){ e.preventDefault(); $("stock-in-out").scrollIntoView({behavior: "smooth", block: "start"}); };
+    var mb = $("mb");
+    document.querySelectorAll(".shop-branch-card[data-branch-id]").forEach(function(card){
+      card.addEventListener("click", function(){
+        if(mb && mb.value !== card.getAttribute("data-branch-id")){ mb.value = card.getAttribute("data-branch-id"); mb.dispatchEvent(new Event("change")); }
+        $("stock-in-out").scrollIntoView({behavior: "smooth", block: "start"});
+      });
+    });
+    if(!mb) return;
+    var STOCK = stockMap(), UNIT = unitMap(), BR = branchMap(), err = errBox("merr"), bin = $("bin"), bout = $("bout"), photo = null;
+    function avail(pid){ return (STOCK[mb.value] || {})[pid] || 0; }
+    var pk;
+    function summarize(){
+      err.hide();
+      var n = pk ? pk.items().length : 0, tag = n > 1 ? " (" + n + " products)" : "";
+      bin.textContent = "+ Stock IN" + tag; bout.textContent = "− Stock OUT" + tag;
+    }
+    pk = ProductPicker({grid: $("mgrid"), search: $("msearch"), cart: $("mcart"), empty: $("mempty"),
+      products: pickerProducts(), units: UNIT, avail: avail, allowZero: true, notify: err.show, onChange: summarize});
+    mb.addEventListener("change", function(){ pk.refresh(); });
+    var pin = $("stockoutphoto"), wrap = $("stockout-preview-wrap"), prev = $("stockout-preview");
+    pin.addEventListener("change", function(){
+      var f = this.files && this.files[0];
+      if(!f){ wrap.style.display = "none"; photo = null; return; }
+      readPhoto(f).then(function(d){ photo = d; prev.src = d; wrap.style.display = "block"; },
+                        function(m){ err.show(m); pin.value = ""; photo = null; });
+    });
+    $("stockout-clear").onclick = function(){ pin.value = ""; photo = null; prev.removeAttribute("src"); wrap.style.display = "none"; };
+    [bin, bout].forEach(function(b){
+      b.onclick = function(){
+        var k = b.getAttribute("data-kind"), items = pk.items(), msg = "";
+        if(!items.length) msg = "Tap at least one product first.";
+        items.forEach(function(it){
+          if(!msg && !(it.qty > 0)) msg = "Enter how many " + it.name + ", or remove it.";
+          else if(!msg && k === "OUT" && it.qty > avail(it.pid))
+            msg = "Not enough " + it.name + " in " + BR[mb.value] + ". Only " + avail(it.pid) + " " + (UNIT[it.pid] || "") + " in stock.";
+        });
+        if(msg){ err.show(msg); return; }
+        var note = $("mnote").value.trim();
+        if(k === "OUT"){
+          var rb = $("reasonbox"), rt = $("mreason");
+          rb.style.display = "block";
+          var reason = clean(rt.value, 200);
+          if(!reason){
+            err.show("Please enter the required Stock OUT remark before submitting.");
+            rt.focus(); rb.scrollIntoView({behavior: "smooth", block: "center"}); return;
+          }
+          note = "Reason: " + reason + (note ? " | " + note : "");
+        } else { $("reasonbox").style.display = "none"; }
+        doMove(+mb.value, k, items, note, k === "OUT" ? photo : null);
+      };
+    });
+    summarize();
+  }
+};
+function doMove(bid, kind, items, note, photo){
+  var L = collectLines(items), b = branchById(bid);
+  if(L.error){ flash(L.error, "error"); return go("stock", {branch: bid}); }
+  if(kind === "OUT"){
+    var short = shortList(L, bid);
+    if(short.length){ flash("Not enough stock in " + b.name + " for: " + short.join(", ") + ". Nothing was saved.", "error"); return go("stock", {branch: bid}); }
+  }
+  var stamp = now(), ph = storePhoto(photo);
+  L.order.forEach(function(pid){
+    var q = L.lines[pid];
+    addQty(pid, bid, kind === "IN" ? q : -q);
+    addTx(pid, bid, kind, q, note, stamp, ph);
+  });
+  save().then(function(){ flash(b.name + ": stock " + kind + " – " + itemsText(L) + "."); go("stock", {branch: bid}); });
+}
+
+/* ---------- Sales ---------- */
+function salesQuery(f){
+  var rows = S.sales.filter(function(s){
+    if(f.branch_id && s.branch_id !== +f.branch_id) return false;
+    if((f.pay === "FREE" || f.pay === "CREDIT" || f.pay === "PAID") && s.pay_type !== f.pay) return false;
+    if(f.pay === "PENDING" && !(s.pay_type === "CREDIT" && !s.settled_at)) return false;
+    if(f.from && s.created_at < f.from + " 00:00:00") return false;
+    if(f.to && s.created_at > f.to + " 23:59:59") return false;
+    return productById(s.product_id) && branchById(s.branch_id);
+  });
+  rows.sort(function(a, b){ return b.id - a.id; });
+  return rows;
+}
+function salesCSV(f){
+  var rows = salesQuery(f).reverse();
+  downloadCSV("sales.csv", ["time","branch","product","qty","unit","payment","customer","credit_paid_on","note"],
+    rows.map(function(r){ var p = productById(r.product_id);
+      return [r.created_at, bname(r.branch_id), p.name, r.qty, p.unit, r.pay_type, r.customer, r.settled_at || "", r.note]; }));
+}
+PAGES.sales = {
+  title: "Sales",
+  render: function(args){
+    var f = {branch_id: args.branch_id || "", pay: args.pay || "", from: args.from || "", to: args.to || ""};
+    var rows = salesQuery(f), brs = branches(), prods = products();
+    var sel = +args.b || (brs[0] && brs[0].id), selPay = args.p === "CREDIT" ? "CREDIT" : "FREE";
+    var t = {pend_qty: 0, pend_n: 0, coll_qty: 0, coll_n: 0, free_qty: 0, free_n: 0}, debtors = {}, bs = {};
+    rows.forEach(function(r){
+      if(r.pay_type === "FREE"){ t.free_qty += r.qty; t.free_n++; }
+      else if(r.pay_type === "CREDIT" && r.settled_at){ t.coll_qty += r.qty; t.coll_n++; }
+      else if(r.pay_type === "CREDIT"){
+        t.pend_qty += r.qty; t.pend_n++;
+        var d = debtors[r.customer || "(no name)"] = debtors[r.customer || "(no name)"] || {n: 0, qty: 0, key: r.customer || ""};
+        d.n++; d.qty += r.qty;
+      }
+      var x = bs[r.branch_id] = bs[r.branch_id] || {name: bname(r.branch_id), bid: r.branch_id, qty: 0, n: 0, credit_qty: 0, free_qty: 0};
+      x.qty += r.qty; x.n++;
+      if(r.pay_type === "CREDIT") x.credit_qty += r.qty; else if(r.pay_type === "FREE") x.free_qty += r.qty;
+    });
+    var customers = {};
+    S.sales.forEach(function(s){ if(s.customer) customers[s.customer] = 1; });
+
+    var h = '<div class="card"><h2>Record a sale</h2>';
+    if(!prods.length) h += noProductsMsg();
+    else h += '<div class="step">1 · Which branch is selling</div><select id="sb" style="width:100%">' + branchOptions(sel) + '</select>' +
+      '<div class="step">2 · Tap the products sold (tap again to add one more)</div>' +
+      '<input class="psearch" id="ssearch" type="search" placeholder="Search product…" autocomplete="off"><div class="pgrid" id="sgrid"></div>' +
+      '<div class="cart"><div class="cartempty" id="sempty">Tap a product above to add it to this sale</div><div id="scart"></div></div>' +
+      '<div class="step">3 · How was it given</div><div class="paygrid">' +
+      '<div><input type="radio" name="pay_type" id="pFREE" value="FREE"' + (selPay === "FREE" ? " checked" : "") + '><label for="pFREE">Free<small>no payment</small></label></div>' +
+      '<div><input type="radio" name="pay_type" id="pCREDIT" value="CREDIT"' + (selPay === "CREDIT" ? " checked" : "") + '><label for="pCREDIT">Credit<small>pays later</small></label></div></div>' +
+      '<div id="custbox" style="display:none"><div class="step">4 · Who is taking it on credit?</div>' +
+      '<input id="scust" list="custlist" placeholder="Customer name" style="width:100%" autocomplete="off">' +
+      '<datalist id="custlist">' + Object.keys(customers).sort().map(function(c){ return '<option value="' + esc(c) + '">'; }).join("") + '</datalist></div>' +
+      '<div class="step">Note (optional)</div><input id="snote" placeholder="Anything to remember" style="width:100%">' +
+      '<div class="errbox" id="saleerr"></div><button class="big" id="savebtn">Record sale</button>';
+    h += '</div>';
+
+    h += '<div class="grid" style="margin-bottom:16px">' +
+      '<div class="bcard"><b>Credit – to collect</b><span class="r" style="font-size:22px">' + fmt(t.pend_qty) + '</span><span>items · ' + t.pend_n + ' unpaid sale(s)</span></div>' +
+      '<div class="bcard"><b>Credit – collected</b><span class="g" style="font-size:22px">' + fmt(t.coll_qty) + '</span><span>items · ' + t.coll_n + ' sale(s)</span></div>' +
+      '<div class="bcard"><b>Free</b><span style="font-size:22px;color:var(--txt)">' + fmt(t.free_qty) + '</span><span>items · ' + t.free_n + ' sale(s)</span></div></div>' +
+      '<p style="margin:-6px 0 14px"><small>Totals are for the sales listed below (they follow the filter).</small></p>';
+
+    var dl = Object.keys(debtors).map(function(k){ return {customer: k, n: debtors[k].n, qty: debtors[k].qty, key: debtors[k].key}; }).sort(function(a, b){ return b.qty - a.qty; });
+    if(dl.length){
+      h += '<div class="card"><h2>Customers who still owe items</h2><div class="scroll"><table><tr><th>Customer</th><th class="n">Unpaid sales</th><th class="n">Items</th><th></th></tr>' +
+        dl.map(function(d){ return '<tr><td>' + esc(d.customer) + '</td><td class="n">' + d.n + '</td><td class="n r">' + fmt(d.qty) + '</td>' +
+          '<td class="n"><button class="mini" data-settle-cust="' + esc(d.key) + '">Mark all paid</button></td></tr>'; }).join("") +
+        '</table></div></div>';
+    }
+
+    function chip(label, pay){ return '<a class="chip ' + (f.pay === pay ? "on" : "") + '" href="' + link("sales", Object.assign({}, f, {pay: pay})) + '">' + label + '</a>'; }
+    h += '<div class="card"><h2>Sales list</h2><div class="chips">' + chip("All", "") + chip("Free", "FREE") + chip("Credit", "CREDIT") + chip("Credit not paid", "PENDING") + '</div>' +
+      '<details' + (f.branch_id || f.from || f.to ? " open" : "") + '><summary>Filter by branch or date</summary><div class="row" style="margin-bottom:10px">' +
+      '<select id="fbr"><option value="">All branches</option>' + branchOptions(f.branch_id) + '</select>' +
+      '<input type="date" id="ffrom" value="' + esc(f.from) + '"><input type="date" id="fto" value="' + esc(f.to) + '"><button id="fapply">Apply</button></div></details>' +
+      '<div class="scroll"><table><tr><th>When</th><th>Branch</th><th>Product</th><th class="n">Qty</th><th>Payment</th><th>Customer</th><th></th></tr>' +
+      (rows.length ? rows.slice(0, 300).map(function(r){
+        var p = productById(r.product_id);
+        return '<tr><td>' + esc(r.created_at.slice(5, 16)) + '</td><td>' + esc(bname(r.branch_id)) + '</td><td>' + esc(p.name) + (r.note ? '<br><small>' + esc(r.note) + '</small>' : '') + '</td>' +
+          '<td class="n"><strong>' + fmt(r.qty) + '</strong> ' + esc(p.unit) + '</td><td><span class="tag ' + r.pay_type + '">' + r.pay_type + '</span>' +
+          (r.pay_type === "CREDIT" ? '<br><small>' + (r.settled_at ? "paid on " + esc(r.settled_at.slice(5, 10)) : "not paid yet") + '</small>' : '') + '</td>' +
+          '<td>' + esc(r.customer || "") + '</td><td style="white-space:nowrap">' + (r.pay_type === "CREDIT" && !r.settled_at ? '<button class="mini" data-settle="' + r.id + '">Mark paid</button>' : '') + '</td></tr>';
+      }).join("") : '<tr><td colspan="7">No sales yet. Record the first one above.</td></tr>') +
+      '</table></div>' + (rows.length > 300 ? '<small>Showing the latest 300 of ' + rows.length + '.</small><br>' : '') +
+      '<a href="#" id="salescsv">Download this list as CSV</a></div>';
+
+    var bl = Object.keys(bs).map(function(k){ return bs[k]; }).sort(function(a, b){ return b.qty - a.qty; });
+    if(bl.length){
+      var mx = bl[0].qty || 1;
+      h += '<div class="card"><h2>&#128202; Sales by Branch</h2><div class="bc-wrap"><table class="bc-tbl"><thead><tr><th>#</th><th>Branch</th><th style="min-width:120px">Sales Volume</th>' +
+        '<th class="n">Qty Sold</th><th class="n">Transactions</th><th class="n">Credit Qty</th><th class="n">Free Qty</th><th></th></tr></thead><tbody>' +
+        bl.map(function(bd, i){ var pc = Math.round(bd.qty / mx * 100);
+          return '<tr><td><span class="bc-rank ' + (i === 0 ? "top" : "") + '">' + (i + 1) + '</span></td><td><strong>' + esc(bd.name) + '</strong></td>' +
+            '<td><div style="display:flex;align-items:center;gap:8px"><div class="bc-bar-bg" style="flex:1"><div class="bc-bar-fill" style="width:' + pc + '%"></div></div>' +
+            '<span style="font-size:12px;color:var(--muted);white-space:nowrap">' + pc + '%</span></div></td>' +
+            '<td class="n"><strong>' + fmt(bd.qty) + '</strong></td><td class="n">' + bd.n + '</td>' +
+            '<td class="n">' + (bd.credit_qty > 0 ? '<span class="bc-badge credit">' + fmt(bd.credit_qty) + '</span>' : '&mdash;') + '</td>' +
+            '<td class="n">' + (bd.free_qty > 0 ? '<span class="bc-badge free">' + fmt(bd.free_qty) + '</span>' : '&mdash;') + '</td>' +
+            '<td class="n"><a class="bc-dl" href="#" data-branch-csv="' + bd.bid + '">&#11015; Download CSV</a></td></tr>'; }).join("") +
+        '</tbody></table></div><small style="display:block;margin-top:10px">Percentages and volumes reflect the current filter (date range, payment type). Click Download CSV to get the full sales list for that branch.</small></div>';
+    }
+    return h;
+  },
+  mount: function(args){
+    var f = {branch_id: args.branch_id || "", pay: args.pay || "", from: args.from || "", to: args.to || ""};
+    $("fapply").onclick = function(){ go("sales", Object.assign({}, f, {branch_id: $("fbr").value, from: $("ffrom").value, to: $("fto").value})); };
+    $("salescsv").onclick = function(e){ e.preventDefault(); salesCSV(f); };
+    document.querySelectorAll("[data-branch-csv]").forEach(function(a){ a.onclick = function(e){ e.preventDefault(); salesCSV({branch_id: a.getAttribute("data-branch-csv")}); }; });
+    document.querySelectorAll("[data-settle]").forEach(function(b){ b.onclick = function(){ settleSale(+b.getAttribute("data-settle")); }; });
+    document.querySelectorAll("[data-settle-cust]").forEach(function(b){ b.onclick = function(){
+      var c = b.getAttribute("data-settle-cust");
+      if(confirm("Mark all unpaid credit for " + (c || "(no name)") + " as paid?")) settleCustomer(c);
+    }; });
+    var sb = $("sb");
+    if(!sb) return;
+    var STOCK = stockMap(), UNIT = unitMap(), BR = branchMap(), cust = $("scust"), box = $("custbox"), btn = $("savebtn"), err = errBox("saleerr");
+    function pay(){ return document.querySelector("input[name=pay_type]:checked").value; }
+    function avail(pid){ return (STOCK[sb.value] || {})[pid] || 0; }
+    var pk;
+    function summarize(){
+      err.hide();
+      var n = pk ? pk.items().length : 0, c = pay() === "CREDIT";
+      btn.style.background = c ? "#dc2626" : "#eab308";
+      btn.style.color = c ? "#fff" : "#111";
+      btn.textContent = "Record " + (c ? "credit" : "free") + " sale" + (n > 1 ? " (" + n + " products)" : "");
+      box.style.display = c ? "block" : "none";
+    }
+    pk = ProductPicker({grid: $("sgrid"), search: $("ssearch"), cart: $("scart"), empty: $("sempty"),
+      products: pickerProducts(), units: UNIT, avail: avail, allowZero: false, notify: err.show, onChange: summarize,
+      rowHint: function(pid){ return "In stock at " + BR[sb.value] + ": " + avail(pid) + " " + (UNIT[pid] || ""); }});
+    sb.addEventListener("change", function(){ pk.refresh(); });
+    document.querySelectorAll("input[name=pay_type]").forEach(function(r){ r.addEventListener("change", summarize); });
+    btn.onclick = function(){
+      var msg = "", items = pk.items();
+      if(!items.length) msg = "Tap at least one product.";
+      items.forEach(function(it){
+        if(!msg && !(it.qty > 0)) msg = "Enter a quantity for " + it.name + ", or remove it.";
+        else if(!msg && it.qty > avail(it.pid)) msg = "Not enough " + it.name + " in " + BR[sb.value] + ". Only " + avail(it.pid) + " " + (UNIT[it.pid] || "") + " in stock.";
+      });
+      if(!msg && pay() === "CREDIT" && !cust.value.trim()) msg = "Enter the customer name for a credit sale.";
+      if(msg){ err.show(msg); return; }
+      btn.disabled = true; btn.textContent = "Saving…";
+      addSale(+sb.value, pay(), pay() === "CREDIT" ? cust.value.trim() : "", $("snote").value.trim(), items);
+    };
+    summarize();
+  }
+};
+function addSale(bid, pay, customer, note, items){
+  var L = collectLines(items), b = branchById(bid), back = {b: bid, p: pay};
+  if(L.error){ flash(L.error, "error"); return go("sales", back); }
+  var short = shortList(L, bid);
+  if(short.length){ flash("Not enough stock in " + b.name + " for: " + short.join(", ") + ". Nothing was saved.", "error"); return go("sales", back); }
+  var label = {PAID: "Paid", FREE: "Free", CREDIT: "Credit"}[pay], stamp = now();
+  L.order.forEach(function(pid){
+    var q = L.lines[pid];
+    addQty(pid, bid, -q);
+    addTx(pid, bid, "OUT", q, "Sale (" + label + ")" + (customer ? " – " + customer : ""), stamp);
+    S.sales.push({id: nextId("sales"), product_id: +pid, branch_id: bid, qty: q, price: 0, total: 0, pay_type: pay,
+                  customer: customer, note: note, created_at: stamp, settled_at: null});
+  });
+  save().then(function(){
+    flash("Saved " + label.toLowerCase() + " sale from " + b.name + (customer ? " to " + customer : "") + ": " + itemsText(L) + ".");
+    go("sales", back);
+  });
+}
+function settleSale(sid){
+  var s = S.sales.find(function(x){ return x.id === sid && x.pay_type === "CREDIT" && !x.settled_at; });
+  if(!s){ flash("Nothing to update.", "error"); render(); return; }
+  s.settled_at = now();
+  save().then(function(){ flash("Credit marked as paid."); render(); });
+}
+function settleCustomer(name){
+  var n = 0, stamp = now();
+  S.sales.forEach(function(s){ if((s.customer || "") === name && s.pay_type === "CREDIT" && !s.settled_at){ s.settled_at = stamp; n++; } });
+  save().then(function(){ flash("All credit for " + (name || "(no name)") + " marked as paid (" + n + " sale(s))."); render(); });
+}
+
+/* ---------- Credit ---------- */
+function pendingCredit(){
+  return S.sales.filter(function(s){ return s.pay_type === "CREDIT" && !s.settled_at && s.customer && productById(s.product_id) && branchById(s.branch_id); })
+    .sort(function(a, b){ return a.created_at < b.created_at ? 1 : a.created_at > b.created_at ? -1 : b.id - a.id; });
+}
+PAGES.credit = {
+  title: "Credit",
+  render: function(){
+    var rows = pendingCredit();
+    return '<div class="card"><h2>Pending credit sales</h2><p><a href="#" id="creditcsv">Download pending credit as CSV</a></p>' +
+      '<div class="scroll"><table><tr><th>When</th><th>Name</th><th>Product</th><th>Branch</th><th class="n">Qty</th><th></th></tr>' +
+      (rows.length ? rows.map(function(c){ var p = productById(c.product_id);
+        return '<tr><td>' + esc(c.created_at.slice(5, 16)) + '</td><td><strong>' + esc(c.customer) + '</strong></td><td>' + esc(p.name) + '</td><td>' + esc(bname(c.branch_id)) + '</td>' +
+          '<td class="n r">' + fmt(c.qty) + ' ' + esc(p.unit) + '</td><td class="n"><button class="mini" data-settle="' + c.id + '">Mark paid</button></td></tr>'; }).join("")
+        : '<tr><td colspan="6">No unpaid credit sales.</td></tr>') + '</table></div></div>';
+  },
+  mount: function(){
+    document.querySelectorAll("[data-settle]").forEach(function(b){ b.onclick = function(){ settleSale(+b.getAttribute("data-settle")); }; });
+    $("creditcsv").onclick = function(e){
+      e.preventDefault();
+      downloadCSV("pending_credit.csv", ["name","product","qty","unit","branch","sale_time"],
+        pendingCredit().map(function(r){ var p = productById(r.product_id); return [r.customer, p.name, r.qty, p.unit, bname(r.branch_id), r.created_at]; }));
+    };
+  }
+};
+
+/* ---------- Transfer & Returns (shared builder) ---------- */
+function moveRoute(args){
+  var ids = branches().map(function(b){ return b.id; });
+  var from = +args.f; if(ids.indexOf(from) < 0) from = ids[0];
+  var to = +args.t; if(ids.indexOf(to) < 0 || to === from){ to = ids.find(function(i){ return i !== from; }); if(to === undefined) to = from; }
+  return {from: from, to: to};
+}
+function movePage(kind){
+  var isRet = kind === "returns";
+  return {
+    title: isRet ? "Return Product" : "Transfer",
+    render: function(args){
+      var rt = moveRoute(args), prods = products();
+      var h = '<div class="card"><h2>' + (isRet ? "Return products to another branch" : "Move products between branches") + '</h2>';
+      if(!prods.length) h += noProductsMsg();
+      else {
+        h += '<div class="step">1 · ' + (isRet ? "Which branch gives the product back, and to which branch" : "From which branch to which branch") + '</div>' +
+          '<div class="route"><div><label for="fb">' + (isRet ? "Returning branch" : "From") + '</label><select id="fb">' + branchOptions(rt.from) + '</select></div>' +
+          '<div class="arrow">→</div><div><label for="tb">' + (isRet ? "Gets it back" : "To") + '</label><select id="tb">' + branchOptions(rt.to) + '</select></div></div>' +
+          '<div class="step">2 · Tap the products ' + (isRet ? "being returned" : "to move") + ' (tap again to add one more)</div>' +
+          '<input class="psearch" id="tsearch" type="search" placeholder="Search product…" autocomplete="off"><div class="pgrid" id="tgrid"></div>' +
+          '<div class="cart"><div class="cartempty" id="tempty">Tap a product above to add it to this ' + (isRet ? "return" : "transfer") + '</div><div id="tcart"></div></div>';
+        if(isRet) h += '<div class="step">3 · Why is it being returned? (required)</div>' +
+          '<input id="rreason" list="rreasons" maxlength="200" autocomplete="off" placeholder="Pick or type a reason" style="width:100%">' +
+          '<datalist id="rreasons"><option value="Excess stock"><option value="Damaged"><option value="Expired"><option value="Wrong item sent"><option value="Not selling"><option value="Branch closing"></datalist>';
+        h += '<div class="step">Note (optional)</div><input id="tnote" placeholder="Anything to remember" style="width:100%">' +
+          '<div class="errbox" id="terr"></div><button class="big" id="tbtn" style="background:#2563eb">' + (isRet ? "Return product" : "Move stock") + '</button>';
+      }
+      h += '</div>';
+      var list = S[kind].filter(function(r){ return productById(r.product_id) && branchById(r.from_branch_id) && branchById(r.to_branch_id); })
+        .sort(function(a, b){ return b.id - a.id; }).slice(0, 100);
+      h += '<div class="card"><h2>Recent ' + (isRet ? "returns" : "transfers") + '</h2><div class="scroll"><table><tr><th>When</th><th>Product</th><th class="n">Qty</th><th>' +
+        (isRet ? "Returned by → To" : "From → To") + '</th><th>' + (isRet ? "Reason" : "Note") + '</th><th></th></tr>' +
+        (list.length ? list.map(function(r){ var p = productById(r.product_id);
+          return '<tr><td>' + esc(r.created_at.slice(5, 16)) + '</td><td>' + esc(p.name) + '</td><td class="n"><strong>' + fmt(r.qty) + '</strong> ' + esc(p.unit) + '</td>' +
+            '<td>' + esc(bname(r.from_branch_id)) + ' → ' + esc(bname(r.to_branch_id)) + '</td>' +
+            '<td>' + (isRet ? esc(r.reason) + (r.note ? '<br><small>' + esc(r.note) + '</small>' : '') : esc(r.note || "")) + '</td>' +
+            '<td><button class="del" data-undo="' + r.id + '">Undo</button></td></tr>'; }).join("")
+          : '<tr><td colspan="6">No ' + (isRet ? "returns" : "transfers") + ' yet.</td></tr>') + '</table></div></div>';
+      return h;
+    },
+    mount: function(){
+      document.querySelectorAll("[data-undo]").forEach(function(b){ b.onclick = function(){
+        if(confirm(isRet ? "Undo this return and send the items back?" : "Undo this transfer and move the items back?")) undoMove(kind, +b.getAttribute("data-undo"));
+      }; });
+      var fb = $("fb"), tb = $("tb");
+      if(!fb) return;
+      var STOCK = stockMap(), UNIT = unitMap(), BR = branchMap(), btn = $("tbtn"), err = errBox("terr");
+      function avail(pid){ return (STOCK[fb.value] || {})[pid] || 0; }
+      function there(pid){ return (STOCK[tb.value] || {})[pid] || 0; }
+      var pk;
+      function summarize(){
+        err.hide();
+        var n = pk ? pk.items().length : 0;
+        btn.textContent = isRet ? "Return " + (n > 1 ? n + " products" : "product") + " to " + BR[tb.value]
+                                : "Move " + (n > 1 ? n + " products" : "stock") + " to " + BR[tb.value];
+      }
+      pk = ProductPicker({grid: $("tgrid"), search: $("tsearch"), cart: $("tcart"), empty: $("tempty"),
+        products: pickerProducts(), units: UNIT, avail: avail, allowZero: false, notify: err.show, onChange: summarize,
+        rowHint: function(pid){ return BR[fb.value] + ": " + avail(pid) + "  ·  " + BR[tb.value] + ": " + there(pid) + " " + (UNIT[pid] || ""); }});
+      function fixRoute(changed){
+        if(fb.value === tb.value){
+          var target = changed === "from" ? tb : fb, keep = changed === "from" ? fb.value : tb.value;
+          for(var i = 0; i < target.options.length; i++){ if(target.options[i].value !== keep){ target.value = target.options[i].value; break; } }
+        }
+        pk.refresh(); summarize();
+      }
+      fb.addEventListener("change", function(){ fixRoute("from"); });
+      tb.addEventListener("change", function(){ fixRoute("to"); });
+      btn.onclick = function(){
+        var msg = "", items = pk.items(), reason = isRet ? clean($("rreason").value, 200) : "";
+        if(fb.value === tb.value) msg = "Choose two different branches.";
+        if(!msg && !items.length) msg = "Tap at least one product.";
+        if(!msg && isRet && !reason) msg = "Please write the reason for this return.";
+        items.forEach(function(it){
+          if(!msg && !(it.qty > 0)) msg = "Enter a quantity for " + it.name + ", or remove it.";
+          else if(!msg && it.qty > avail(it.pid)) msg = BR[fb.value] + " only has " + avail(it.pid) + " " + (UNIT[it.pid] || "") + " of " + it.name + ".";
+        });
+        if(msg){ err.show(msg); return; }
+        btn.disabled = true; btn.textContent = isRet ? "Returning…" : "Moving…";
+        addMove(kind, +fb.value, +tb.value, items, reason, $("tnote").value.trim());
+      };
+      fixRoute("from");
+    }
+  };
+}
+PAGES.transfer = movePage("transfers");
+PAGES.returns = movePage("returns");
+function pageOf(kind){ return kind === "returns" ? "returns" : "transfer"; }
+function addMove(kind, fid, tid, items, reason, note){
+  var isRet = kind === "returns", back = {f: fid, t: tid}, L = collectLines(items), bf = branchById(fid), bt = branchById(tid);
+  if(fid === tid){ flash("Choose two different branches.", "error"); return go(pageOf(kind), back); }
+  if(L.error){ flash(L.error, "error"); return go(pageOf(kind), back); }
+  var short = shortList(L, fid);
+  if(short.length){ flash("Not enough stock in " + bf.name + " for: " + short.join(", ") + ". Nothing was " + (isRet ? "returned." : "moved."), "error"); return go(pageOf(kind), back); }
+  var stamp = now();
+  L.order.forEach(function(pid){
+    var q = L.lines[pid];
+    addQty(pid, fid, -q); addQty(pid, tid, q);
+    if(isRet){
+      addTx(pid, fid, "OUT", q, "Return to " + bt.name + " — " + reason, stamp);
+      addTx(pid, tid, "IN", q, "Return from " + bf.name + " — " + reason, stamp);
+      S.returns.push({id: nextId("returns"), product_id: +pid, from_branch_id: fid, to_branch_id: tid, qty: q, reason: reason, note: note, created_at: stamp});
+    } else {
+      addTx(pid, fid, "OUT", q, "Transfer to " + bt.name, stamp);
+      addTx(pid, tid, "IN", q, "Transfer from " + bf.name, stamp);
+      S.transfers.push({id: nextId("transfers"), product_id: +pid, from_branch_id: fid, to_branch_id: tid, qty: q, note: note, created_at: stamp});
+    }
+  });
+  save().then(function(){
+    flash((isRet ? "Returned from " : "Moved from ") + bf.name + " to " + bt.name + ": " + itemsText(L) + ".");
+    go(pageOf(kind), back);
+  });
+}
+function undoMove(kind, id){
+  var isRet = kind === "returns", i = S[kind].findIndex(function(r){ return r.id === id; });
+  if(i < 0){ flash((isRet ? "Return" : "Transfer") + " not found.", "error"); return render(); }
+  var t = S[kind][i], back = {f: t.from_branch_id, t: t.to_branch_id}, have = getQty(t.product_id, t.to_branch_id);
+  if(have + 1e-9 < t.qty){
+    flash("Can't undo: the " + (isRet ? "branch that received it" : "receiving branch") + " has only " + fmt(have) + " left of these items (it has already used some).", "error");
+    return go(pageOf(kind), back);
+  }
+  var stamp = now(), label = (isRet ? "Return #" : "Transfer #") + id + " undone";
+  addQty(t.product_id, t.to_branch_id, -t.qty); addQty(t.product_id, t.from_branch_id, t.qty);
+  addTx(t.product_id, t.to_branch_id, "OUT", t.qty, label, stamp);
+  addTx(t.product_id, t.from_branch_id, "IN", t.qty, label, stamp);
+  S[kind].splice(i, 1);
+  save().then(function(){
+    flash(isRet ? "Return undone. The items are back in the returning branch." : "Transfer undone. The items are back in the first branch.");
+    go(pageOf(kind), back);
+  });
+}
+
+/* ---------- Branch Dashboard ---------- */
+var BD_COLORS = [["#6366f1","#8b5cf6"],["#0ea5e9","#2563eb"],["#10b981","#059669"],["#f59e0b","#ea580c"],
+                 ["#ec4899","#db2777"],["#14b8a6","#0d9488"],["#ef4444","#dc2626"],["#64748b","#475569"]];
+function branchMoves(bid, other){
+  var groups = {}, list = [];
+  [["transfer", "transfers"], ["return", "returns"]].forEach(function(kt){
+    S[kt[1]].forEach(function(r){
+      if(r.from_branch_id !== bid && r.to_branch_id !== bid) return;
+      var p = productById(r.product_id); if(!p) return;
+      var out = r.from_branch_id === bid, peer = out ? r.to_branch_id : r.from_branch_id;
+      if(other && peer !== other) return;
+      var key = kt[0] + "|" + r.from_branch_id + "|" + r.to_branch_id + "|" + r.created_at;
+      var g = groups[key];
+      if(!g){ g = groups[key] = {is_return: kt[0] === "return", out: out, other: bname(peer), lines: [], reason: r.reason || "", note: r.note || "", stamp: r.created_at || ""}; list.push(g); }
+      g.lines.push({name: p.name, unit: p.unit, qty: r.qty, photo: photoSrc(p.photo)});
+    });
+  });
+  return list.sort(function(a, b){ return a.stamp < b.stamp ? -1 : a.stamp > b.stamp ? 1 : 0; });
+}
+function branchSummary(events){
+  var d = new Date(); d.setDate(d.getDate() - 30);
+  var cut = dateStr(d), s = {sent: 0, recv: 0, returns: 0, moves: 0};
+  events.forEach(function(e){
+    if(e.stamp.slice(0, 10) < cut) return;
+    var q = e.lines.reduce(function(a, l){ return a + l.qty; }, 0);
+    s.moves++; if(e.out) s.sent += q; else s.recv += q; if(e.is_return) s.returns++;
+  });
+  return s;
+}
+function bdImg(src){ return src ? '<img class="bdimg" src="' + esc(src) + '" alt="" loading="lazy">' : '<div class="bdimg">📦</div>'; }
+PAGES["branch-chat"] = {
+  title: "Branch Dashboard",
+  render: function(args, path){
+    var brs = branches(), colors = {};
+    brs.forEach(function(b, i){ colors[b.id] = BD_COLORS[i % BD_COLORS.length]; });
+    if(!brs.length) return '<div class="card"><p>No branches yet.</p></div>';
+    var bid = +(path.split("/")[1] || 0);
+    if(!branchById(bid)){
+      var totals = {moves: 0, moved: 0, returns: 0};
+      var cards = brs.map(function(b){
+        var ev = branchMoves(b.id), sm = branchSummary(ev), rows = [];
+        for(var i = ev.length - 1; i >= 0 && rows.length < 6; i--){
+          ev[i].lines.forEach(function(l){ rows.push({l: l, e: ev[i]}); });
+        }
+        totals.moves += sm.moves; totals.moved += sm.sent; totals.returns += sm.returns;
+        var c = colors[b.id];
+        return '<div class="bdc"><div class="bdc-top" style="background:linear-gradient(135deg,' + c[0] + ',' + c[1] + ')"><div class="bdav">' + esc(b.name.slice(0, 1).toUpperCase()) + '</div>' +
+          '<div><h3>' + esc(b.name) + '</h3><small>' + sm.moves + ' movement(s) in 30 days</small></div></div>' +
+          '<div class="bdstats"><div class="o"><b>' + fmt(sm.sent) + '</b><span>Sent out</span></div><div class="i"><b>' + fmt(sm.recv) + '</b><span>Received</span></div><div class="r"><b>' + sm.returns + '</b><span>Returns</span></div></div>' +
+          '<div class="bdlist">' + (rows.length ? rows.slice(0, 6).map(function(r){
+            return '<div class="bdrow">' + bdImg(r.l.photo) + '<div class="bdmid"><div class="nm" title="' + esc(r.l.name) + '">' + esc(r.l.name) + '</div>' +
+              '<div class="mt"><span class="pill ' + (r.e.out ? "out" : "in") + '">' + (r.e.out ? "→ " : "← ") + esc(r.e.other) + '</span>' + (r.e.is_return ? '<span class="pill ret">RETURN</span>' : '') + ' · ' + esc(niceWhen(r.e.stamp)) + '</div></div>' +
+              '<div class="bdq"><b>' + fmt(r.l.qty) + '</b><span>' + esc(r.l.unit) + '</span></div></div>'; }).join("") : '<div class="bdempty">No transfers or returns yet</div>') +
+          '</div><a class="bdfoot" href="#/branch-chat/' + b.id + '">Open full history →</a></div>';
+      }).join("");
+      return '<div class="bdh"><h2>Branch Dashboard</h2><p>Every transfer and return, branch by branch, with the product photos · last 30 days</p>' +
+        '<div class="bds"><div><b>' + brs.length + '</b><span>Branches</span></div><div><b>' + totals.moves + '</b><span>Movements</span></div>' +
+        '<div><b>' + fmt(totals.moved) + '</b><span>Items moved</span></div><div><b>' + totals.returns + '</b><span>Returns</span></div></div></div>' +
+        '<div class="bdgrid">' + cards + '</div>';
+    }
+    var other = +args["with"] || 0; if(!branchById(other) || other === bid) other = 0;
+    var all = branchMoves(bid, other), events = all.slice(-200), hero = branchSummary(all), c = colors[bid], lastDay = null;
+    var msgs = events.map(function(m){
+      var day = m.stamp.slice(0, 10), s = "";
+      if(day !== lastDay) s += '<div class="day">' + esc(niceWhen(m.stamp, false)) + '</div>';
+      lastDay = day;
+      return s + '<div class="bub ' + (m.out ? "out" : "in") + '"><div class="who">' + (m.out ? "You sent to " : "Received from ") + esc(m.other) + (m.is_return ? '<span class="pill ret">RETURN</span>' : '') + '</div>' +
+        m.lines.map(function(it){ return '<div class="it">' + bdImg(it.photo) + '<div><div class="nm">' + esc(it.name) + '</div><div class="q">' + fmt(it.qty) + ' ' + esc(it.unit) + '</div></div></div>'; }).join("") +
+        (m.reason ? '<div class="why">Reason: ' + esc(m.reason) + '</div>' : '') + (m.note ? '<div class="nt">' + esc(m.note) + '</div>' : '') +
+        '<div class="when">' + esc(m.stamp.slice(11, 16)) + '</div></div>';
+    }).join("");
+    return '<div class="bdh" style="background:linear-gradient(135deg,' + c[0] + ',' + c[1] + ')"><h2>' + esc(bname(bid)) + '</h2>' +
+      '<p>All transfers and returns with product photos' + (other ? ' · with ' + esc(bname(other)) + ' only' : '') + '</p>' +
+      '<div class="bds"><div><b>' + fmt(hero.sent) + '</b><span>Sent out (30 days)</span></div><div><b>' + fmt(hero.recv) + '</b><span>Received (30 days)</span></div>' +
+      '<div><b>' + hero.moves + '</b><span>Movements</span></div><div><b>' + hero.returns + '</b><span>Returns</span></div></div></div>' +
+      '<div class="card"><div class="bctabs"><a href="#/branch-chat">← Dashboard</a>' + brs.map(function(b){ return '<a href="#/branch-chat/' + b.id + '" class="' + (b.id === bid ? "on" : "") + '">' + esc(b.name) + '</a>'; }).join("") + '</div>' +
+      '<div class="row" style="margin-bottom:10px"><select id="bcwith"><option value="">All branches</option>' +
+      brs.filter(function(b){ return b.id !== bid; }).map(function(b){ return '<option value="' + b.id + '"' + (b.id === other ? " selected" : "") + '>' + esc(b.name) + '</option>'; }).join("") + '</select></div>' +
+      '<div class="chat" id="chat">' + (msgs || '<div class="chatempty">No transfers or returns for this branch yet.</div>') + '</div>' +
+      '<small>Blue = stock this branch sent out · white = stock it received · newest at the bottom.</small></div>';
+  },
+  mount: function(args, path){
+    var c = $("chat"); if(c) c.scrollTop = c.scrollHeight;
+    var w = $("bcwith"); if(w) w.onchange = function(){ go(path, {"with": w.value}); };
+  }
+};
+
+/* ---------- History ---------- */
+function historyQuery(f){
+  var rows = S.transactions.filter(function(t){
+    if(f.branch_id && t.branch_id !== +f.branch_id) return false;
+    if(f.product_id && t.product_id !== +f.product_id) return false;
+    if(f.from && t.created_at < f.from + " 00:00:00") return false;
+    if(f.to && t.created_at > f.to + " 23:59:59") return false;
+    return productById(t.product_id) && branchById(t.branch_id);
+  });
+  rows.sort(function(a, b){ return b.id - a.id; });
+  return rows;
+}
+PAGES.history = {
+  title: "History",
+  render: function(args){
+    var f = {branch_id: args.branch_id || "", product_id: args.product_id || "", from: /^\d{4}-\d\d-\d\d$/.test(args.from || "") ? args.from : "", to: /^\d{4}-\d\d-\d\d$/.test(args.to || "") ? args.to : ""};
+    var all = historyQuery(f), tin = 0, tout = 0;
+    all.forEach(function(r){ if(r.kind === "IN") tin += r.qty; else tout += r.qty; });
+    var t = new Date(), today = new Date(t.getFullYear(), t.getMonth(), t.getDate());
+    function add(d, n){ var x = new Date(d); x.setDate(x.getDate() + n); return x; }
+    var week = add(today, -((today.getDay() + 6) % 7)), first = new Date(today.getFullYear(), today.getMonth(), 1), lastPrev = add(first, -1);
+    var spans = [["Today", today, today], ["Yesterday", add(today, -1), add(today, -1)], ["This week", week, today], ["This month", first, today],
+                 ["Last month", new Date(lastPrev.getFullYear(), lastPrev.getMonth(), 1), lastPrev], ["Last 30 days", add(today, -29), today]];
+    var chips = spans.map(function(s){ var a = dateStr(s[1]), b = dateStr(s[2]), on = f.from === a && f.to === b;
+      return '<a href="' + link("history", Object.assign({}, f, {from: a, to: b})) + '" class="chip ' + (on ? "on" : "") + '">' + s[0] + '</a>'; }).join("") +
+      '<a href="' + link("history", Object.assign({}, f, {from: "", to: ""})) + '" class="chip ' + (!f.from && !f.to ? "on" : "") + '">All time</a>';
+    var shown = Math.min(300, all.length);
+    return '<div class="card"><h2>Find or download history</h2><div class="chips">' + chips + '</div><div class="row">' +
+      '<select id="hbr"><option value="">All branches</option>' + branchOptions(f.branch_id) + '</select>' +
+      '<select id="hpr"><option value="">All products</option>' + products().map(function(p){ return '<option value="' + p.id + '"' + (p.id === +f.product_id ? " selected" : "") + '>' + esc(p.name) + '</option>'; }).join("") + '</select>' +
+      '<div><label style="font-size:12px;color:#6b7280">From date</label><input type="date" id="hfrom" value="' + esc(f.from) + '" style="width:100%"></div>' +
+      '<div><label style="font-size:12px;color:#6b7280">To date</label><input type="date" id="hto" value="' + esc(f.to) + '" style="width:100%"></div>' +
+      '<button id="hshow">Show</button><button class="in" id="hcsv">⬇ Download CSV</button></div>' +
+      '<small>The download has every entry in the chosen dates and branch, not just the ' + shown + ' shown below. Open it in Excel or Google Sheets.</small></div>' +
+      '<div class="card"><h2>Transactions (' + all.length + (all.length > 300 ? " · showing latest 300" : "") + ')</h2>' +
+      '<p style="margin:0 0 10px">Total IN: <span class="g">+' + fmt(tin) + '</span> &nbsp; Total OUT: <span class="r">−' + fmt(tout) + '</span></p>' +
+      '<div class="scroll"><table><tr><th>Time</th><th>Branch</th><th>Product</th><th>Type</th><th class="n">Qty</th><th>Remark / Note</th><th>Photo</th></tr>' +
+      (all.length ? all.slice(0, 300).map(function(r){ var p = productById(r.product_id), ph = photoSrc(r.photo);
+        return '<tr><td>' + esc(r.created_at) + '</td><td>' + esc(bname(r.branch_id)) + '</td><td>' + esc(p.name) + '</td><td><span class="tag ' + r.kind + '">' + r.kind + '</span></td>' +
+          '<td class="n">' + fmt(r.qty) + ' ' + esc(p.unit) + '</td><td>' + esc(r.note || "") + '</td>' +
+          '<td>' + (ph ? '<img src="' + esc(ph) + '" alt="Stock OUT evidence" data-view-photo style="width:54px;height:54px;object-fit:cover;border-radius:7px;cursor:pointer">' : '<small>—</small>') + '</td></tr>'; }).join("")
+        : '<tr><td colspan="7">No transactions found.</td></tr>') + '</table></div></div>';
+  },
+  mount: function(){
+    function cur(){ return {branch_id: $("hbr").value, product_id: $("hpr").value, from: $("hfrom").value, to: $("hto").value}; }
+    $("hshow").onclick = function(){ go("history", cur()); };
+    $("hcsv").onclick = function(){
+      var f = cur();
+      downloadCSV("stock_history_" + (f.from || "start") + "_to_" + (f.to || "today") + ".csv", ["time","branch","product","type","qty","unit","note"],
+        historyQuery(f).reverse().map(function(r){ var p = productById(r.product_id); return [r.created_at, bname(r.branch_id), p.name, r.kind, r.qty, p.unit, r.note]; }));
+    };
+    bindPhotoViewer();
+  }
+};
+function bindPhotoViewer(){
+  document.querySelectorAll("img[data-view-photo]").forEach(function(img){
+    img.onclick = function(){ var w = window.open(); if(w){ w.document.write('<img src="' + img.src + '" style="max-width:100%">'); } };
+  });
+}
+
+/* ---------- Products ---------- */
+PAGES.products = {
+  title: "Products",
+  render: function(){
+    var prods = products();
+    return '<div class="card"><h2>Add Product</h2><div class="row">' +
+      '<input id="pname" placeholder="Product name">' +
+      '<label class="photobtn" id="addphotolbl"><span id="addphototxt">📷 Add photo (optional)</span><input type="file" id="pphoto" accept="image/*" style="display:none"></label>' +
+      '<input id="punit" placeholder="Unit (pcs, kg…)" value="pcs">' +
+      '<input id="plow" type="number" step="any" min="0" placeholder="Low-stock level" value="0">' +
+      '<select id="pbranch">' + branchOptions() + '</select>' +
+      '<input id="pqty" type="number" step="any" min="0" placeholder="Opening stock (optional)">' +
+      '<button id="padd">Add product</button></div></div>' +
+      '<div class="card"><h2>Add Many Products at Once</h2>' +
+      '<p style="margin:0 0 8px;font-size:13px;color:#4b5563">One per line: <code>Name, Opening stock, Unit, Low-stock level</code> (everything after the name is optional)</p>' +
+      '<textarea id="blines" rows="6" style="width:100%" placeholder="Rice,23,kg,10"></textarea>' +
+      '<div class="row" style="margin-top:8px;align-items:center"><label style="flex:0 0 auto">Opening stock goes to:</label>' +
+      '<select id="bbranch">' + branchOptions() + '</select><button id="badd">Add all</button></div></div>' +
+      '<div class="card"><h2>All Products (' + prods.length + ')</h2><div class="scroll"><table><tr><th>Photo</th><th>Name</th><th>Unit</th><th class="n">Low level</th><th></th></tr>' +
+      (prods.length ? prods.map(function(p){ var ph = photoSrc(p.photo);
+        return '<tr><td>' + (ph ? '<img class="pthumb" loading="lazy" alt="" src="' + esc(ph) + '" data-view-photo style="cursor:pointer">' : '<div class="pnone">📦</div>') + '</td>' +
+          '<td>' + esc(p.name) + '</td><td>' + esc(p.unit) + '</td><td class="n">' + fmt(p.low_limit) + '</td>' +
+          '<td><div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">' +
+          '<label class="photobtn">📷 ' + (ph ? "Change photo" : "Add photo") + '<input type="file" accept="image/*" data-photo-for="' + p.id + '" style="display:none"></label>' +
+          (ph ? '<button class="del" data-rmphoto="' + p.id + '">Remove photo</button>' : '') +
+          '<button class="del" data-delprod="' + p.id + '">Delete</button></div></td></tr>'; }).join("")
+        : '<tr><td colspan="5">No products yet.</td></tr>') + '</table></div></div>';
+  },
+  mount: function(){
+    var newPhoto = null, pending = null;
+    $("pphoto").onchange = function(){
+      var f = this.files && this.files[0]; if(!f) return;
+      $("addphototxt").textContent = "📷 " + f.name.slice(0, 22) + " ✓ ";
+      pending = readPhoto(f).then(function(d){ newPhoto = d; pending = null; }, function(m){ newPhoto = null; pending = null; flash("The photo was not used: " + m, "error"); });
+    };
+    $("padd").onclick = function(){
+      Promise.resolve(pending).then(function(){
+        addProduct($("pname").value, $("punit").value, $("plow").value, $("pqty").value, $("pbranch").value, newPhoto);
+      });
+    };
+    $("badd").onclick = function(){ bulkAdd($("blines").value, $("bbranch").value); };
+    document.querySelectorAll("[data-photo-for]").forEach(function(inp){
+      inp.onchange = function(){
+        var f = inp.files && inp.files[0], p = productById(inp.getAttribute("data-photo-for")); if(!f || !p) return;
+        readPhoto(f).then(function(d){
+          var old = p.photo; p.photo = storePhoto(d); dropUnusedPhoto(old);
+          save().then(function(){ flash("Saved the photo of " + p.name + "."); render(); });
+        }, function(m){ flash(m, "error"); render(); });
+      };
+    });
+    document.querySelectorAll("[data-rmphoto]").forEach(function(b){ b.onclick = function(){
+      var p = productById(b.getAttribute("data-rmphoto"));
+      if(!p || !confirm("Remove the photo of " + p.name + "?")) return;
+      var old = p.photo; p.photo = null; dropUnusedPhoto(old);
+      save().then(function(){ flash("Removed the photo of " + p.name + "."); render(); });
+    }; });
+    document.querySelectorAll("[data-delprod]").forEach(function(b){ b.onclick = function(){
+      var p = productById(b.getAttribute("data-delprod"));
+      if(p && confirm("Delete " + p.name + " and all its history?")) deleteProduct(p.id);
+    }; });
+    bindPhotoViewer();
+  }
+};
+function nameTaken(name){ var k = name.toLowerCase(); return S.products.some(function(p){ return p.name.toLowerCase() === k; }); }
+function createProduct(name, unit, low, qty, bid){
+  var p = {id: nextId("products"), name: name, unit: unit, low_limit: low, photo: null};
+  S.products.push(p);
+  if(qty > 0 && branchById(bid)){ addQty(p.id, +bid, qty); addTx(p.id, +bid, "IN", qty, "Opening stock", now()); }
+  return p;
+}
+function addProduct(name, unit, low, qty, bid, photo){
+  name = String(name || "").trim(); unit = String(unit || "").trim() || "pcs";
+  low = parseFloat(low || 0); qty = parseFloat(qty || 0);
+  if(isNaN(low) || isNaN(qty)){ flash("Numbers only for quantity fields.", "error"); return render(); }
+  if(!name || low < 0 || qty < 0){ flash("Please fill the form correctly.", "error"); return render(); }
+  if(nameTaken(name)){ flash("'" + name + "' already exists.", "error"); return render(); }
+  var p = createProduct(name, unit, low, qty, bid);
+  if(photo) p.photo = storePhoto(photo);
+  save().then(function(){ flash("Added " + name + "." + (photo ? " Photo saved." : "")); render(); });
+}
+function bulkAdd(text, bid){
+  var added = 0, skipped = [];
+  String(text || "").split(/\r?\n/).forEach(function(line){
+    var parts = line.split(",").map(function(x){ return x.trim(); });
+    if(!parts[0]){ if(line.trim()) skipped.push(line.trim()); return; }
+    var qty = parts[1] ? Number(parts[1]) : 0, unit = parts[2] || "pcs", low = parts[3] ? Number(parts[3]) : 0;
+    if(isNaN(qty) || isNaN(low) || qty < 0 || low < 0 || nameTaken(parts[0])){ skipped.push(line.trim()); return; }
+    createProduct(parts[0], unit, low, qty, bid); added++;
+  });
+  save().then(function(){ flash("Added " + added + " product(s)." + (skipped.length ? " Skipped: " + skipped.join("; ") : ""), skipped.length ? "error" : ""); render(); });
+}
+function deleteProduct(pid){
+  var p = productById(pid);
+  S.products = S.products.filter(function(x){ return x.id !== pid; });
+  Object.keys(S.stock).forEach(function(k){ if(+k.split(":")[1] === pid) delete S.stock[k]; });
+  var photos = S.transactions.filter(function(t){ return t.product_id === pid && t.photo; }).map(function(t){ return t.photo; });
+  ["transactions", "sales", "transfers", "returns"].forEach(function(tb){ S[tb] = S[tb].filter(function(r){ return r.product_id !== pid; }); });
+  if(p) photos.push(p.photo);
+  photos.forEach(dropUnusedPhoto);
+  save().then(function(){ flash("Product deleted."); render(); });
+}
+
+/* ---------- Branches ---------- */
+PAGES.branches = {
+  title: "Branches",
+  render: function(){
+    var brs = branches();
+    return '<div class="card"><h2>Add a branch</h2><div class="row"><input id="nbname" placeholder="New branch name" maxlength="40"><button class="in" id="nbadd">Add branch</button></div>' +
+      '<small>You have ' + brs.length + ' branch(es). A new branch shows up everywhere straight away: stock, sales, transfers and history.</small></div>' +
+      '<div class="card"><h2>Rename or remove branches</h2><div style="display:flex;flex-direction:column;gap:8px">' +
+      brs.map(function(b){ return '<div style="display:flex;gap:8px;align-items:center"><input data-bname="' + b.id + '" value="' + esc(b.name) + '" maxlength="40" style="flex:1;min-width:0">' +
+        '<button class="del" data-delbranch="' + b.id + '" style="flex:0 0 auto;padding:9px 12px">Remove</button></div>'; }).join("") +
+      '<button id="bsave">Save names</button></div><small>A branch that has any stock history can\'t be removed. Rename it instead.</small></div>';
+  },
+  mount: function(){
+    $("nbadd").onclick = function(){
+      var name = clean($("nbname").value, 40);
+      if(!name) flash("Enter a branch name.", "error");
+      else if(S.branches.length >= 30) flash("That is the maximum number of branches (30).", "error");
+      else if(S.branches.some(function(b){ return b.name.toLowerCase() === name.toLowerCase(); })) flash("There is already a branch called “" + name + "”.", "error");
+      else { S.branches.push({id: nextId("branches"), name: name}); return save().then(function(){ flash("Branch “" + name + "” added."); render(); }); }
+      render();
+    };
+    $("bsave").onclick = function(){
+      document.querySelectorAll("[data-bname]").forEach(function(inp){ var n = clean(inp.value, 40), b = branchById(inp.getAttribute("data-bname")); if(n && b) b.name = n; });
+      save().then(function(){ flash("Branch names saved."); render(); });
+    };
+    document.querySelectorAll("[data-delbranch]").forEach(function(btn){ btn.onclick = function(){
+      if(!confirm("Remove this branch? This only works if it has never had any stock or sales.")) return;
+      var bid = +btn.getAttribute("data-delbranch"), b = branchById(bid);
+      if(!b){ flash("Branch not found.", "error"); return render(); }
+      if(S.branches.length <= 1){ flash("You need at least one branch.", "error"); return render(); }
+      var used = S.transactions.some(function(t){ return t.branch_id === bid; }) || S.sales.some(function(s){ return s.branch_id === bid; }) ||
+        S.transfers.concat(S.returns).some(function(t){ return t.from_branch_id === bid || t.to_branch_id === bid; }) ||
+        Object.keys(S.stock).some(function(k){ return +k.split(":")[0] === bid && S.stock[k] !== 0; });
+      if(used){ flash("“" + b.name + "” has stock or history, so it can't be removed. Rename it instead.", "error"); return render(); }
+      Object.keys(S.stock).forEach(function(k){ if(+k.split(":")[0] === bid) delete S.stock[k]; });
+      S.branches = S.branches.filter(function(x){ return x.id !== bid; });
+      save().then(function(){ flash("Branch “" + b.name + "” removed."); render(); });
+    }; });
+  }
+};
+
+/* =====================================================================
+   Sign-in, users and passwords (same rules as the Python app)
+   ===================================================================== */
+var MIN_PASSWORD = 6, SALES_MINUTES = 30, HASH_ITER = 210000;
+var USER_PAGES = [
+  ["stock", "Stock", "stock", "&#127968;"], ["sales", "Sales", "sales", "&#128176;"], ["credit", "Credit", "credit", "&#128203;"],
+  ["transfer", "Transfer", "transfer", "&#128260;"], ["returns", "Return Product", "returns", "&#8617;"],
+  ["branchchat", "Branch Dashboard", "branch-chat", "&#128202;"], null,
+  ["history", "History", "history", "&#128220;"], ["products", "Products", "products", "&#128218;"],
+  ["branches", "Branches", "branches", "&#127978;"], null,
+  ["users", "Users", "users", "&#128101;"], ["userlog", "User Log", "user-log", "&#128203;"],
+  ["settings", "Settings", "settings", "&#9881;"], ["backup", "Backup & Data", "backup", "&#128190;"]
+];
+var PAGE_LIST = USER_PAGES.filter(Boolean);
+var PAGE_KEY = {};
+PAGE_LIST.forEach(function(p){ PAGE_KEY[p[2]] = p[0]; });
+var PAGE_KEYS = PAGE_LIST.map(function(p){ return p[0]; });
+var SALES_PAGES = ["sales", "credit", "settings"];          // need the sales password when signed in with the app password
+var ADMIN_ONLY_DEFAULT = ["users", "userlog", "settings", "backup"];
+var LEGACY_PAGE_ACCESS = {
+  sales_only: ["stock", "sales"],
+  no_loyverse_branch: ["stock", "sales", "credit", "transfer", "returns", "branchchat", "history", "products"],
+  no_branch: ["stock", "sales", "credit", "transfer", "returns", "branchchat", "history", "products"]
+};
+
+/* --- PBKDF2-SHA256, stored in the same format as the Python app (werkzeug) --- */
+var SHA_K = new Int32Array([0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2]);
+var SHA_IV = new Int32Array([0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19]);
+function shaCompress(H, W){
+  var t, a, b, c, d, e, f, g, h, s0, s1, t1, t2;
+  for(t = 16; t < 64; t++){
+    a = W[t - 15]; b = W[t - 2];
+    s0 = ((a >>> 7) | (a << 25)) ^ ((a >>> 18) | (a << 14)) ^ (a >>> 3);
+    s1 = ((b >>> 17) | (b << 15)) ^ ((b >>> 19) | (b << 13)) ^ (b >>> 10);
+    W[t] = (W[t - 16] + s0 + W[t - 7] + s1) | 0;
+  }
+  a = H[0]; b = H[1]; c = H[2]; d = H[3]; e = H[4]; f = H[5]; g = H[6]; h = H[7];
+  for(t = 0; t < 64; t++){
+    t1 = (h + (((e >>> 6) | (e << 26)) ^ ((e >>> 11) | (e << 21)) ^ ((e >>> 25) | (e << 7))) + ((e & f) ^ (~e & g)) + SHA_K[t] + W[t]) | 0;
+    t2 = ((((a >>> 2) | (a << 30)) ^ ((a >>> 13) | (a << 19)) ^ ((a >>> 22) | (a << 10))) + ((a & b) ^ (a & c) ^ (b & c))) | 0;
+    h = g; g = f; f = e; e = (d + t1) | 0; d = c; c = b; b = a; a = (t1 + t2) | 0;
+  }
+  H[0] = (H[0] + a) | 0; H[1] = (H[1] + b) | 0; H[2] = (H[2] + c) | 0; H[3] = (H[3] + d) | 0;
+  H[4] = (H[4] + e) | 0; H[5] = (H[5] + f) | 0; H[6] = (H[6] + g) | 0; H[7] = (H[7] + h) | 0;
+}
+function shaFrom(state, bytes, prefix){
+  var H = Int32Array.from(state), W = new Int32Array(64), L = bytes.length, n = ((L + 9 + 63) >> 6) << 6, m = new Uint8Array(n), bits = (L + prefix) * 8;
+  m.set(bytes); m[L] = 0x80;
+  m[n - 4] = (bits >>> 24) & 255; m[n - 3] = (bits >>> 16) & 255; m[n - 2] = (bits >>> 8) & 255; m[n - 1] = bits & 255;
+  for(var o = 0; o < n; o += 64){
+    for(var i = 0; i < 16; i++) W[i] = (m[o + 4 * i] << 24) | (m[o + 4 * i + 1] << 16) | (m[o + 4 * i + 2] << 8) | m[o + 4 * i + 3];
+    shaCompress(H, W);
+  }
+  return H;
+}
+function wordsToBytes(H){ var b = new Uint8Array(H.length * 4); for(var i = 0; i < H.length; i++){ b[4*i] = H[i] >>> 24; b[4*i+1] = H[i] >>> 16; b[4*i+2] = H[i] >>> 8; b[4*i+3] = H[i]; } return b; }
+function toHex(bytes){ var s = ""; for(var i = 0; i < bytes.length; i++) s += (bytes[i] < 16 ? "0" : "") + bytes[i].toString(16); return s; }
+function pbkdf2Js(pw, salt, iters){
+  var key = pw.length > 64 ? wordsToBytes(shaFrom(SHA_IV, pw, 0)) : pw, kb = new Uint8Array(64), W = new Int32Array(64), i, j;
+  kb.set(key);
+  var IS = Int32Array.from(SHA_IV), OS = Int32Array.from(SHA_IV);
+  for(i = 0; i < 16; i++) W[i] = ((kb[4*i] << 24) | (kb[4*i+1] << 16) | (kb[4*i+2] << 8) | kb[4*i+3]) ^ 0x36363636;
+  shaCompress(IS, W);
+  for(i = 0; i < 16; i++) W[i] = ((kb[4*i] << 24) | (kb[4*i+1] << 16) | (kb[4*i+2] << 8) | kb[4*i+3]) ^ 0x5c5c5c5c;
+  shaCompress(OS, W);
+  function outer(inner){
+    var H = Int32Array.from(OS);
+    for(var k = 0; k < 8; k++) W[k] = inner[k];
+    W[8] = 0x80000000; for(k = 9; k < 15; k++) W[k] = 0; W[15] = 768;
+    shaCompress(H, W); return H;
+  }
+  var msg = new Uint8Array(salt.length + 4); msg.set(salt); msg[salt.length + 3] = 1;
+  var U = outer(shaFrom(IS, msg, 64)), T = Int32Array.from(U);
+  for(j = 1; j < iters; j++){
+    var H = Int32Array.from(IS);
+    for(i = 0; i < 8; i++) W[i] = U[i];
+    W[8] = 0x80000000; for(i = 9; i < 15; i++) W[i] = 0; W[15] = 768;
+    shaCompress(H, W);
+    U = outer(H);
+    for(i = 0; i < 8; i++) T[i] ^= U[i];
+  }
+  return toHex(wordsToBytes(T));
+}
+function pbkdf2Hex(pw, salt, iters){
+  var enc = new TextEncoder(), p = enc.encode(pw), s = enc.encode(salt);
+  var subtle = window.crypto && window.crypto.subtle;
+  if(!subtle) return Promise.resolve(pbkdf2Js(p, s, iters));
+  return subtle.importKey("raw", p, "PBKDF2", false, ["deriveBits"])
+    .then(function(k){ return subtle.deriveBits({name: "PBKDF2", hash: "SHA-256", salt: s, iterations: iters}, k, 256); })
+    .then(function(b){ return toHex(new Uint8Array(b)); })
+    .catch(function(){ return pbkdf2Js(p, s, iters); });
+}
+function randomText(n, chars){
+  chars = chars || "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+  var r = new Uint32Array(n), s = "";
+  if(window.crypto && crypto.getRandomValues) crypto.getRandomValues(r); else for(var i = 0; i < n; i++) r[i] = Math.floor(Math.random() * 4294967296);
+  for(var j = 0; j < n; j++) s += chars[r[j] % chars.length];
+  return s;
+}
+function makeHash(pw){
+  var salt = randomText(16);
+  return pbkdf2Hex(pw, salt, HASH_ITER).then(function(h){ return "pbkdf2:sha256:" + HASH_ITER + "$" + salt + "$" + h; });
+}
+function checkHash(stored, pw){
+  var m = /^pbkdf2:sha256(?::(\d+))?\$([^$]*)\$([0-9a-f]+)$/.exec(stored || "");
+  if(!m || !pw) return Promise.resolve(false);
+  return pbkdf2Hex(pw, m[2], m[1] ? +m[1] : 600000).then(function(h){ return h === m[3]; });
+}
+
+/* --- Session (kept for 12 hours on this device, like the Python app) --- */
+var SESSION = {};
+function loadSession(){ try { SESSION = JSON.parse(localStorage.getItem("stock_session") || "{}") || {}; } catch(e){ SESSION = {}; } if(!(SESSION.expires > Date.now())) SESSION = {}; }
+function saveSession(){ try { localStorage.setItem("stock_session", JSON.stringify(SESSION)); } catch(e){} }
+function startSession(extra){
+  SESSION = Object.assign({auth: true, v: S.auth.ver, role: "admin", expires: Date.now() + 12 * 3600000}, extra || {});
+  saveSession();
+}
+function deviceName(){
+  var low = navigator.userAgent.toLowerCase();
+  var os = /android/.test(low) ? "Android" : /iphone/.test(low) ? "iPhone" : /ipad/.test(low) ? "iPad" : /windows/.test(low) ? "Windows" : /mac os/.test(low) ? "Mac" : /linux/.test(low) ? "Linux" : "Other";
+  var br = /edg\//.test(low) ? "Edge" : /chrome/.test(low) ? "Chrome" : /firefox/.test(low) ? "Firefox" : /safari/.test(low) ? "Safari" : "Browser";
+  return os + " · " + br;
+}
+function logEvent(username, event){
+  S.auth.log.push({id: nextId("user_log"), username: username, event: event, device: deviceName(), created_at: now()});
+  if(S.auth.log.length > 1000) S.auth.log = S.auth.log.slice(-1000);
+}
+function currentUser(){ return SESSION.user_id ? S.auth.users.find(function(u){ return u.id === SESSION.user_id; }) : null; }
+function userPages(u){
+  if(u.role === "admin") return PAGE_KEYS.slice();
+  if(Array.isArray(u.pages)) return u.pages.filter(function(p){ return PAGE_KEYS.indexOf(p) >= 0; });
+  return (LEGACY_PAGE_ACCESS[u.role] || []).slice();
+}
+function isAdmin(){ return SESSION.role === "admin"; }
+function canOpenPage(pk){ return isAdmin() || (Array.isArray(SESSION.pages) && SESSION.pages.indexOf(pk) >= 0); }
+function firstAllowedPage(){ var p = PAGE_LIST.find(function(x){ return canOpenPage(x[0]); }); return p ? p[2] : null; }
+function salesUnlocked(){ return !!SESSION.user_id || (SESSION.sales_until || 0) > Date.now(); }
+
+/* Returns true when the signed-in person may see the app; otherwise shows setup / login. */
+function authGate(){
+  if(!S.auth){ showSetup(); return false; }
+  if(!SESSION.auth || SESSION.v !== S.auth.ver){ SESSION = {}; showLogin(); return false; }
+  if(SESSION.user_id){
+    var u = currentUser();
+    if(!u || !u.active){ SESSION = {}; saveSession(); showLogin("Your account was disabled or removed. Ask the administrator."); return false; }
+    SESSION.role = u.role === "admin" ? "admin" : "staff"; SESSION.pages = userPages(u); SESSION.username = u.username;
+  }
+  hideAuth();
+  return true;
+}
+function logout(){
+  if(S.auth && SESSION.username){ logEvent(SESSION.username, "LOGOUT"); save(); }
+  SESSION = {}; try { localStorage.removeItem("stock_session"); } catch(e){}
+  go("stock");
+}
+function buildNav(){
+  var h = "", sep = false;
+  USER_PAGES.forEach(function(p){
+    if(!p){ sep = true; return; }
+    if(!canOpenPage(p[0])) return;
+    if(sep && h){ h += '<div class="sb-sep"></div>'; } sep = false;
+    h += '<a href="#/' + p[2] + '">' + p[3] + ' ' + esc(p[1]) + '</a>';
+  });
+  h += '<div class="sb-sep"></div><div class="sb-logout"><a href="#" id="logoutlink">&#128682; Log out</a></div>';
+  $("sbnav").innerHTML = h;
+  $("logoutlink").onclick = function(e){ e.preventDefault(); logout(); };
+  $("live").innerHTML = "&#11044; saved on this device" + '<div class="sb-user">Signed in as <strong>' + esc(SESSION.username || "administrator") + '</strong></div>';
+}
+
+/* --- Login / setup / unlock screens --- */
+var FAILS = {};
+function lockedOut(key){ var r = FAILS[key]; return !!(r && r.until > Date.now()); }
+function noteFailure(key){ var r = FAILS[key] = FAILS[key] || {n: 0, until: 0}; if(++r.n >= 5){ r.n = 0; r.until = Date.now() + 60000; } }
+function hideAuth(){ $("authscreen").style.display = "none"; $("sidebar").style.display = ""; document.querySelector(".wrapper").style.display = ""; }
+function authForm(o){
+  // o: heading, sub, note, error, fields:[{id,label,type,ac}], button, back, extra, onSubmit(values, ui)
+  $("sidebar").style.display = "none"; document.querySelector(".wrapper").style.display = "none";
+  var el = $("authscreen"); el.style.display = "flex";
+  el.innerHTML = '<div class="abox"><h1>📦 ' + esc(o.heading) + '</h1><p>' + esc(o.sub) + '</p>' +
+    '<div class="aerr" id="aerr"' + (o.error ? '' : ' style="display:none"') + '>' + esc(o.error || "") + '</div>' +
+    (o.note ? '<div class="anote">' + o.note + '</div>' : '') +
+    '<form id="aform" autocomplete="off" novalidate>' + o.fields.map(function(f, i){
+      return '<label for="' + f.id + '">' + esc(f.label) + '</label><input id="' + f.id + '" type="' + (f.type || "password") + '" autocomplete="' + (f.ac || "off") + '"' + (i === 0 ? " autofocus" : "") + '>';
+    }).join("") +
+    (o.fields.some(function(f){ return (f.type || "password") === "password"; }) ? '<label style="display:flex;align-items:center;gap:8px;font-weight:400"><input id="showpw" type="checkbox" style="width:auto"> Show password</label>' : '') +
+    '<button type="submit" id="abtn">' + esc(o.button) + '</button></form>' + (o.extra || "") +
+    (o.back ? '<p style="margin:14px 0 0"><a href="#" id="aback">← Back</a></p>' : '') + '</div>';
+  var sp = $("showpw");
+  if(sp) sp.onchange = function(){ el.querySelectorAll("input[data-pw],input[type=password]").forEach(function(i){ i.setAttribute("data-pw", "1"); i.type = sp.checked ? "text" : "password"; }); };
+  if(o.back) $("aback").onclick = function(e){ e.preventDefault(); o.back(); };
+  var first = el.querySelector("input"); if(first) first.focus();
+  var ui = {
+    error: function(m){ var a = $("aerr"); a.textContent = m; a.style.display = "block"; $("abtn").disabled = false; $("abtn").textContent = o.button; },
+    busy: function(){ $("abtn").disabled = true; $("abtn").textContent = "Please wait…"; }
+  };
+  $("aform").onsubmit = function(e){
+    e.preventDefault();
+    var v = {}; o.fields.forEach(function(f){ v[f.id] = $(f.id).value; });
+    ui.busy(); o.onSubmit(v, ui);
+  };
+  if(o.after) o.after();
+}
+function showSetup(){
+  authForm({
+    heading: "Set up passwords", sub: "Choose two passwords before anyone else uses the app.",
+    note: "Do this now. Whoever opens this page first sets the passwords.",
+    fields: [{id: "app_pw", label: "App password (for everyone who uses the app)", ac: "new-password"},
+             {id: "app_pw2", label: "Type the app password again", ac: "new-password"},
+             {id: "sales_pw", label: "Sales password (only for Sales, Credit, Settings)", ac: "new-password"},
+             {id: "sales_pw2", label: "Type the sales password again", ac: "new-password"}],
+    button: "Save passwords",
+    extra: '<p style="margin:14px 0 0;font-size:13px">Moving from the Raspberry Pi app? <a href="#" id="setupimport">Import stock_data.db</a> to keep its data, users and passwords.</p><input type="file" id="setupdb" accept=".db,.sqlite,.sqlite3" style="display:none">',
+    after: function(){
+      $("setupimport").onclick = function(e){ e.preventDefault(); $("setupdb").click(); };
+      $("setupdb").onchange = function(){
+        var f = this.files && this.files[0]; if(!f) return;
+        importSqlite(f).then(function(n){ flash("Imported from " + f.name + ": " + n); render(); },
+                             function(err){ var a = $("aerr"); a.textContent = "Could not import: " + (err.message || err); a.style.display = "block"; });
+      };
+    },
+    onSubmit: function(v, ui){
+      if(v.app_pw.length < MIN_PASSWORD || v.sales_pw.length < MIN_PASSWORD) return ui.error("Each password needs at least " + MIN_PASSWORD + " characters.");
+      if(v.app_pw !== v.app_pw2 || v.sales_pw !== v.sales_pw2) return ui.error("A password and its confirmation don't match.");
+      if(v.app_pw === v.sales_pw) return ui.error("The sales password must be different from the app password.");
+      var code = newRecoveryCode();
+      Promise.all([makeHash(v.app_pw), makeHash(v.sales_pw), makeHash(code)]).then(function(h){
+        S.auth = {pw_app: h[0], pw_sales: h[1], recovery: h[2], ver: Date.now(), users: [], log: []};
+        startSession({username: "administrator", sales_until: Date.now() + SALES_MINUTES * 60000});
+        logEvent("administrator", "LOGIN");
+        return save();
+      }).then(function(){ showRecoveryCode(code, function(){ flash("Passwords saved. You are signed in."); render(); }); });
+    }
+  });
+}
+function newRecoveryCode(){ var c = randomText(16, "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"); return c.slice(0, 4) + "-" + c.slice(4, 8) + "-" + c.slice(8, 12) + "-" + c.slice(12); }
+function showRecoveryCode(code, done){
+  $("sidebar").style.display = "none"; document.querySelector(".wrapper").style.display = "none";
+  var el = $("authscreen"); el.style.display = "flex";
+  el.innerHTML = '<div class="abox"><h1>🔑 Your recovery code</h1><p>If you ever forget the passwords, this code lets you choose new ones. Nobody can show it to you again.</p>' +
+    '<code>' + esc(code) + '</code><div class="anote">Write it down or take a photo and keep it somewhere safe, away from this device.</div>' +
+    '<button type="button" id="rcdone">I have saved it</button></div>';
+  $("rcdone").onclick = done;
+}
+function showLogin(error){
+  var noUsers = !S.auth.users.length;
+  authForm({
+    heading: "Stock Manager", sub: noUsers ? "Enter the app password to continue." : "Enter your username and password.",
+    error: error || "",
+    fields: [{id: "username", label: noUsers ? "Username (leave empty if you have no account)" : "Username", type: "text", ac: "username"},
+             {id: "password", label: "Password", ac: "current-password"}],
+    button: "Sign in",
+    extra: '<p style="margin:14px 0 0"><a href="#" id="forgot">Forgot the password?</a></p>',
+    after: function(){ $("forgot").onclick = function(e){ e.preventDefault(); showForgot(); }; },
+    onSubmit: function(v, ui){
+      if(lockedOut("app")) return ui.error("Too many wrong tries. Wait a minute and try again.");
+      var name = v.username.trim(), k = name.toLowerCase();
+      var user = name ? S.auth.users.find(function(u){ return u.active && u.username.toLowerCase() === k; }) : null;
+      (user ? checkHash(user.password_hash, v.password) : Promise.resolve(false)).then(function(ok){
+        if(ok){
+          startSession({username: user.username, user_id: user.id, role: user.role === "admin" ? "admin" : "staff", pages: userPages(user)});
+          logEvent(user.username, "LOGIN"); delete FAILS.app;
+          return save().then(render);
+        }
+        if(!user && !S.auth.users.length) return checkHash(S.auth.pw_app, v.password).then(function(ok2){
+          if(!ok2) return fail();
+          startSession({username: "administrator"}); logEvent("administrator", "LOGIN"); delete FAILS.app;
+          return save().then(render);
+        });
+        fail();
+      });
+      function fail(){
+        noteFailure("app");
+        if(name){ logEvent(name.slice(0, 40), "FAILED"); save(); }
+        ui.error("Username or password is incorrect.");
+      }
+    }
+  });
+}
+function showUnlock(){
+  authForm({
+    heading: "Sales is locked", sub: "Enter the sales password to open this page.",
+    fields: [{id: "spw", label: "Sales password", ac: "current-password"}], button: "Unlock",
+    back: function(){ go(firstAllowedPage() || "stock"); },
+    onSubmit: function(v, ui){
+      if(lockedOut("sales")) return ui.error("Too many wrong tries. Wait a minute and try again.");
+      checkHash(S.auth.pw_sales, v.spw).then(function(ok){
+        if(!ok){ noteFailure("sales"); return ui.error("That password is not right."); }
+        delete FAILS.sales;
+        SESSION.sales_until = Date.now() + SALES_MINUTES * 60000; saveSession(); render();
+      });
+    }
+  });
+}
+function showForgot(){
+  var has = !!S.auth.recovery;
+  authForm({
+    heading: "Forgot the password?",
+    sub: has ? "Enter the recovery code you saved when the passwords were set, then choose new passwords."
+             : "No recovery code has been made on this device yet.",
+    fields: has ? [{id: "code", label: "Recovery code", type: "text"},
+                   {id: "app_pw", label: "New app password", ac: "new-password"},
+                   {id: "sales_pw", label: "New sales password", ac: "new-password"}] : [],
+    button: has ? "Reset passwords" : "Erase this device and start again",
+    note: has ? "This also signs you in as administrator, so you can set new passwords for user accounts on the Users page." :
+      "Without the code, the only way back in is to erase the data on this device and start again (then restore a backup file or import stock_data.db). Your stock data is lost unless you have a backup.",
+    back: function(){ showLogin(); },
+    onSubmit: function(v, ui){
+      if(!has){
+        if(!confirm("Erase ALL data on this device? This cannot be undone.") || !confirm("Last check: really erase everything?")) return ui.error("Nothing was erased.");
+        S = emptyState(); SESSION = {}; return save().then(function(){ flash("All data erased."); render(); });
+      }
+      if(lockedOut("recovery")) return ui.error("Too many wrong tries. Wait a minute and try again.");
+      if(v.app_pw.length < MIN_PASSWORD || v.sales_pw.length < MIN_PASSWORD) return ui.error("Each password needs at least " + MIN_PASSWORD + " characters.");
+      if(v.app_pw === v.sales_pw) return ui.error("The sales password must be different from the app password.");
+      checkHash(S.auth.recovery, v.code.trim().toUpperCase()).then(function(ok){
+        if(!ok){ noteFailure("recovery"); return ui.error("That recovery code is not right."); }
+        return Promise.all([makeHash(v.app_pw), makeHash(v.sales_pw)]).then(function(h){
+          S.auth.pw_app = h[0]; S.auth.pw_sales = h[1]; S.auth.ver = Date.now();
+          startSession({username: "administrator", sales_until: Date.now() + SALES_MINUTES * 60000});
+          logEvent("administrator", "LOGIN");
+          return save().then(function(){ flash("Passwords reset. You are signed in as administrator."); go("users"); });
+        });
+      });
+    }
+  });
+}
+
+/* ---------- Users ---------- */
+function pageChecks(name, selected){
+  return '<div class="page-grid">' + PAGE_LIST.map(function(p){
+    return '<label><input type="checkbox" name="' + name + '" value="' + p[0] + '"' + (selected.indexOf(p[0]) >= 0 ? " checked" : "") + '> ' + esc(p[1]) + '</label>';
+  }).join("") + '</div>';
+}
+function checkedValues(root, name){ return Array.prototype.map.call(root.querySelectorAll("input[name='" + name + "']:checked"), function(i){ return i.value; }); }
+function pageLabels(u){
+  if(u.role === "admin") return "Full control";
+  var ps = userPages(u);
+  return PAGE_LIST.filter(function(p){ return ps.indexOf(p[0]) >= 0; }).map(function(p){ return p[1]; }).join(", ") || "No pages";
+}
+PAGES.users = {
+  title: "Users",
+  render: function(){
+    var users = S.auth.users.slice().sort(function(a, b){ return a.id - b.id; });
+    return '<div class="card"><h2>Create a user account</h2><div class="row">' +
+      '<input id="nuname" placeholder="Username" maxlength="40">' +
+      '<input id="nupw" type="password" placeholder="Password (6+ characters)">' +
+      '<label style="flex:0 0 auto;min-width:auto;display:flex;align-items:center;gap:5px;white-space:nowrap"><input id="nushow" type="checkbox" style="min-width:auto;flex:0;width:auto"> Show password</label>' +
+      '<select id="nurole"><option value="staff">Staff account — use selected pages</option><option value="admin">Administrator — full control</option></select></div>' +
+      '<p style="margin:12px 0 2px"><strong>Pages this staff user can open</strong></p><div id="nupages">' + pageChecks("nup", ["stock", "sales"]) + '</div>' +
+      '<button id="nuadd">Create account</button>' +
+      '<p><small>Once any account exists, everyone signs in with a username. Administrator accounts always have full control and skip the sales password.</small></p></div>' +
+      '<div class="card"><h2>Accounts</h2><div class="scroll"><table><tr><th>Username</th><th>Access</th><th>Status</th><th>Action</th></tr>' +
+      (users.length ? users.map(function(u){
+        return '<tr><td>' + esc(u.username) + (u.id === SESSION.user_id ? ' <small>(you)</small>' : '') + '</td><td>' + esc(pageLabels(u)) + '</td><td>' + (u.active ? "Active" : "Disabled") +
+          (u.unsupported ? '<br><small class="r">Password must be set again</small>' : '') + '</td>' +
+          '<td><button class="mini" data-toggle="' + u.id + '">' + (u.active ? "Disable" : "Enable") + '</button></td></tr>' +
+          '<tr><td colspan="4"><details><summary>Account options</summary><p><small>Saved passwords cannot be shown. Set a new password if it is forgotten.</small></p>' +
+          '<div data-uopts="' + u.id + '">' + (u.role === "admin" ? '<p><small>Administrator: full control.</small></p>' :
+            '<strong>Page access</strong>' + pageChecks("up" + u.id, userPages(u)) + '<button class="mini" data-savepages="' + u.id + '">Save page access</button>') +
+          '<div class="row" style="margin-top:10px"><input type="password" data-newpw="' + u.id + '" placeholder="New password (6+ characters)"><button class="mini" data-setpw="' + u.id + '">Set new password</button></div>' +
+          '<div style="margin-top:10px"><button class="del" data-deluser="' + u.id + '">Delete account</button></div></div></details></td></tr>';
+      }).join("") : '<tr><td colspan="4">No separate accounts yet. Everyone signs in with the app password and has administrator access until accounts are created.</td></tr>') +
+      '</table></div></div>' +
+      '<div class="card"><h2>Page assignments</h2><p><small>For each page, select all staff users who may open it.</small></p>' +
+      PAGE_LIST.map(function(p){
+        var staff = users.filter(function(u){ return u.role !== "admin"; });
+        return '<details style="margin:8px 0"><summary><strong>' + esc(p[1]) + '</strong> — choose users</summary><div data-assign="' + p[0] + '"><div class="page-grid">' +
+          (staff.length ? staff.map(function(u){ return '<label><input type="checkbox" name="as" value="' + u.id + '"' + (userPages(u).indexOf(p[0]) >= 0 ? " checked" : "") + '> ' + esc(u.username) + '</label>'; }).join("") : '<small>Create a staff account first.</small>') +
+          '</div>' + (staff.length ? '<button class="mini" data-saveassign="' + p[0] + '">Save ' + esc(p[1]) + ' users</button>' : '') + '</div></details>';
+      }).join("") + '</div>';
+  },
+  mount: function(){
+    $("nushow").onchange = function(){ $("nupw").type = this.checked ? "text" : "password"; };
+    $("nurole").onchange = function(){ $("nupages").style.opacity = this.value === "admin" ? .4 : 1; };
+    $("nuadd").onclick = function(){
+      var name = $("nuname").value.trim(), pw = $("nupw").value, role = $("nurole").value, pages = checkedValues($("nupages"), "nup");
+      if(name.length < 3 || pw.length < MIN_PASSWORD){ flash("Enter a username (at least 3 characters) and a password (at least 6 characters).", "error"); return render(); }
+      if(role !== "admin" && !pages.length){ flash("Select at least one page for a staff account.", "error"); return render(); }
+      if(S.auth.users.some(function(u){ return u.username.toLowerCase() === name.toLowerCase(); })){ flash("That username already exists.", "error"); return render(); }
+      this.disabled = true;
+      makeHash(pw).then(function(h){
+        var u = {id: nextId("users"), username: name, password_hash: h, role: role, pages: role === "admin" ? null : pages, active: true, created_at: now()};
+        S.auth.users.push(u);
+        // The first account replaces the shared app-password login, so keep the creator signed in as that account
+        if(!SESSION.user_id && role === "admin" && S.auth.users.length === 1){ SESSION.user_id = u.id; SESSION.username = u.username; saveSession(); }
+        return save();
+      }).then(function(){ flash("Account '" + name + "' created."); render(); });
+    };
+    document.querySelectorAll("[data-toggle]").forEach(function(b){ b.onclick = function(){
+      var u = S.auth.users.find(function(x){ return x.id === +b.getAttribute("data-toggle"); });
+      if(!u) return;
+      if(u.id === SESSION.user_id){ flash("You cannot disable your own account.", "error"); return render(); }
+      u.active = !u.active; save().then(function(){ flash("Account status updated."); render(); });
+    }; });
+    document.querySelectorAll("[data-savepages]").forEach(function(b){ b.onclick = function(){
+      var id = +b.getAttribute("data-savepages"), u = S.auth.users.find(function(x){ return x.id === id; }), pages = checkedValues(document.querySelector("[data-uopts='" + id + "']"), "up" + id);
+      if(!pages.length){ flash("Select at least one page for this account.", "error"); return render(); }
+      u.pages = pages; save().then(function(){ flash("Page access updated for '" + u.username + "'."); render(); });
+    }; });
+    document.querySelectorAll("[data-setpw]").forEach(function(b){ b.onclick = function(){
+      var id = +b.getAttribute("data-setpw"), u = S.auth.users.find(function(x){ return x.id === id; }), pw = document.querySelector("[data-newpw='" + id + "']").value;
+      if(pw.length < MIN_PASSWORD){ flash("The new password needs at least " + MIN_PASSWORD + " characters.", "error"); return render(); }
+      b.disabled = true;
+      makeHash(pw).then(function(h){ u.password_hash = h; delete u.unsupported; return save(); }).then(function(){ flash("Password changed for '" + u.username + "'."); render(); });
+    }; });
+    document.querySelectorAll("[data-deluser]").forEach(function(b){ b.onclick = function(){
+      var id = +b.getAttribute("data-deluser"), u = S.auth.users.find(function(x){ return x.id === id; });
+      if(id === SESSION.user_id){ flash("You cannot delete the account you are currently using.", "error"); return render(); }
+      if(!confirm("Delete this account? This cannot be undone.")) return;
+      S.auth.users = S.auth.users.filter(function(x){ return x.id !== id; });
+      save().then(function(){ flash("Account '" + u.username + "' deleted."); render(); });
+    }; });
+    document.querySelectorAll("[data-saveassign]").forEach(function(b){ b.onclick = function(){
+      var page = b.getAttribute("data-saveassign"), sel = checkedValues(document.querySelector("[data-assign='" + page + "']"), "as").map(Number);
+      S.auth.users.forEach(function(u){
+        if(u.role === "admin") return;
+        var ps = userPages(u).filter(function(p){ return p !== page; });
+        if(sel.indexOf(u.id) >= 0) ps.push(page);
+        u.pages = ps;
+      });
+      save().then(function(){ flash("Users assigned to the selected page."); render(); });
+    }; });
+  }
+};
+
+/* ---------- User Log ---------- */
+PAGES["user-log"] = {
+  title: "User Log",
+  render: function(args){
+    var events = [["LOGIN", "Signed in"], ["LOGOUT", "Signed out"], ["FAILED", "Wrong password"]];
+    var fu = args.user || "", fe = events.some(function(e){ return e[0] === args.event; }) ? args.event : "";
+    var names = {};
+    S.auth.users.forEach(function(u){ names[u.username] = 1; });
+    S.auth.log.forEach(function(r){ names[r.username] = 1; });
+    var last = {};
+    S.auth.log.forEach(function(r){ if(r.event !== "FAILED") last[r.username] = r; });
+    var rows = S.auth.log.filter(function(r){ return (!fu || r.username === fu) && (!fe || r.event === fe); }).slice().reverse().slice(0, 200);
+    var people = Object.keys(names).sort(function(a, b){ return a.toLowerCase() < b.toLowerCase() ? -1 : 1; });
+    return '<div class="card"><h2>Last activity on this device</h2><div class="scroll"><table><tr><th>User</th><th>Last event</th><th>When</th><th>Device</th></tr>' +
+      (people.length ? people.map(function(n){ var r = last[n];
+        return '<tr><td><strong>' + esc(n) + '</strong>' + (n === SESSION.username ? ' <span class="g">● signed in now</span>' : '') + '</td><td>' + (r ? (r.event === "LOGIN" ? "Signed in" : "Signed out") : "Never") + '</td>' +
+          '<td>' + (r ? esc(niceWhen(r.created_at)) : "—") + '</td><td><small>' + (r ? esc(r.device) : "") + '</small></td></tr>'; }).join("") : '<tr><td colspan="4">No users yet.</td></tr>') +
+      '</table></div><small>This HTML version keeps its own log on each device; it cannot see people using other phones.</small></div>' +
+      '<div class="card"><h2>Sign-in history</h2><div class="row" style="margin-bottom:10px"><select id="lu"><option value="">All users</option>' +
+      people.map(function(n){ return '<option' + (n === fu ? " selected" : "") + ' value="' + esc(n) + '">' + esc(n) + '</option>'; }).join("") + '</select>' +
+      '<select id="le"><option value="">All events</option>' + events.map(function(e){ return '<option value="' + e[0] + '"' + (e[0] === fe ? " selected" : "") + '>' + e[1] + '</option>'; }).join("") + '</select>' +
+      '<button id="lfilter">Filter</button></div><div class="scroll"><table><tr><th>Time</th><th>User</th><th>Event</th><th>Device</th></tr>' +
+      (rows.length ? rows.map(function(r){
+        return '<tr><td style="white-space:nowrap">' + esc(r.created_at) + '</td><td>' + esc(r.username) + '</td><td>' +
+          (r.event === "LOGIN" ? '<span style="color:#15803d">Signed in</span>' : r.event === "LOGOUT" ? '<span style="color:#6b7280">Signed out</span>' : '<span style="color:#b91c1c">Wrong password</span>') +
+          '</td><td><small>' + esc(r.device || "") + '</small></td></tr>'; }).join("") : '<tr><td colspan="4">No activity recorded yet.</td></tr>') +
+      '</table></div><small>Showing the latest ' + rows.length + ' events.</small></div>';
+  },
+  mount: function(){ $("lfilter").onclick = function(){ go("user-log", {user: $("lu").value, event: $("le").value}); }; }
+};
+
+/* ---------- Settings ---------- */
+PAGES.settings = {
+  title: "Settings",
+  render: function(){
+    function pwCard(which, title, text){
+      return '<div class="card"><h2>' + title + '</h2><p style="margin:0 0 10px;font-size:14px;color:#4b5563">' + text + '</p>' +
+        '<div class="row" style="flex-direction:column" data-pwform="' + which + '">' +
+        '<input type="password" name="current" placeholder="Current ' + which + ' password" autocomplete="current-password">' +
+        '<input type="password" name="new" placeholder="New password (' + MIN_PASSWORD + '+ characters)" autocomplete="new-password">' +
+        '<input type="password" name="confirm" placeholder="Type the new password again" autocomplete="new-password">' +
+        '<button data-changepw="' + which + '">Change ' + which + ' password</button></div>' + (which === "sales" ? '<small>Changing either password signs everyone out.</small>' : '') + '</div>';
+    }
+    return pwCard("app", "App password", "Used to sign in while no user accounts exist.") +
+      pwCard("sales", "Sales password", "Needed for the Sales, Credit and Settings pages when signed in with the app password. Keep it to yourself.") +
+      '<div class="card"><h2>Lock sales now</h2><p style="margin:0 0 10px;font-size:14px;color:#4b5563">Sales, Credit and Settings lock by themselves after ' + SALES_MINUTES + ' minutes without use.</p>' +
+      '<button class="del" id="locknow" style="padding:10px 14px">Lock now</button></div>' +
+      '<div class="card"><h2>Recovery code</h2><p style="margin:0 0 10px;font-size:14px;color:#4b5563">' +
+      (S.auth.recovery ? "A recovery code exists. Make a new one if it was lost; the old code stops working." : '<span class="r">No recovery code yet</span> (for example after importing from the Raspberry Pi). Make one now so a forgotten password can be reset.') +
+      '</p><button id="newcode">' + (S.auth.recovery ? "Make a new recovery code" : "Make a recovery code") + '</button></div>' +
+      '<div class="card"><h2>Forgot a password?</h2><p style="margin:0;font-size:14px;color:#4b5563">On the sign-in screen, tap <strong>Forgot the password?</strong> and enter the recovery code to choose new app and sales passwords. ' +
+      'A user who forgot their own password can get a new one from an administrator on the Users page. Your stock data is not touched.</p></div>';
+  },
+  mount: function(){
+    document.querySelectorAll("[data-changepw]").forEach(function(b){ b.onclick = function(){
+      var which = b.getAttribute("data-changepw"), f = document.querySelector("[data-pwform='" + which + "']");
+      var cur = f.querySelector("[name=current]").value, nw = f.querySelector("[name=new]").value, cf = f.querySelector("[name=confirm]").value;
+      var key = "pw_" + which, other = which === "app" ? "pw_sales" : "pw_app";
+      b.disabled = true;
+      checkHash(S.auth[key], cur).then(function(ok){
+        if(!ok) throw "The current password is not right.";
+        if(nw.length < MIN_PASSWORD) throw "The new password needs at least " + MIN_PASSWORD + " characters.";
+        if(nw !== cf) throw "The new password and its confirmation don't match.";
+        return checkHash(S.auth[other], nw);
+      }).then(function(same){
+        if(same) throw "The app password and the sales password must be different.";
+        return makeHash(nw);
+      }).then(function(h){
+        S.auth[key] = h; S.auth.ver = Date.now();
+        SESSION.v = S.auth.ver; SESSION.sales_until = Date.now() + SALES_MINUTES * 60000; saveSession();
+        return save();
+      }).then(function(){ flash((which === "app" ? "App" : "Sales") + " password changed. Other devices and tabs must sign in again."); render(); },
+              function(m){ flash(typeof m === "string" ? m : "Something went wrong.", "error"); render(); });
+    }; });
+    $("locknow").onclick = function(){ SESSION.sales_until = 0; saveSession(); flash(SESSION.user_id ? "Sales lock only applies to the shared app-password login." : "Sales is locked."); go(firstAllowedPage() || "stock"); };
+    $("newcode").onclick = function(){
+      if(S.auth.recovery && !confirm("Make a new recovery code? The old one will stop working.")) return;
+      var code = newRecoveryCode();
+      makeHash(code).then(function(h){ S.auth.recovery = h; return save(); }).then(function(){
+        showRecoveryCode(code, function(){ flash("New recovery code saved."); hideAuth(); render(); });
+      });
+    };
+  }
+};
+
+/* ---------- Backup & Data ---------- */
+PAGES.backup = {
+  title: "Backup & Data",
+  render: function(){
+    var nPhotos = Object.keys(S.photos).length;
+    return '<div class="card"><h2>&#128190; Where your data is kept</h2>' +
+      '<p style="margin-top:0">Everything is saved <strong>in this browser on this device</strong>. Nothing is sent to the internet. ' +
+      'Other phones or computers will not see these changes unless you move a backup to them.</p>' +
+      '<p class="hint">Now saved: ' + S.products.length + ' products · ' + S.branches.length + ' branches · ' + S.transactions.length + ' stock entries · ' +
+      S.sales.length + ' sales · ' + S.transfers.length + ' transfers · ' + S.returns.length + ' returns · ' + nPhotos + ' photos</p>' +
+      '<p class="hint">Clearing the browser\'s site data deletes it. Download a backup regularly.</p></div>' +
+      '<div class="card"><h2>⬇ Download a backup</h2><p class="hint" style="margin-top:0">One file with all data and photos. Keep it safe; you can restore it here or on another device.</p>' +
+      '<button class="in" id="bkdown">Download backup (.json)</button></div>' +
+      '<div class="card"><h2>⬆ Restore a backup</h2><p class="hint" style="margin-top:0">This <strong>replaces</strong> all data on this device with the backup file.</p>' +
+      '<input type="file" id="bkfile" accept=".json,application/json"></div>' +
+      '<div class="card"><h2>&#128229; Import from the Python app (stock_data.db)</h2>' +
+      '<p class="hint" style="margin-top:0">Choose the <code>stock_data.db</code> file from the Raspberry Pi version to copy its branches, products, stock, history, sales, transfers and returns here. ' +
+      'This <strong>replaces</strong> the data on this device. Product photos are separate files on the Pi and are not copied; add them again on the Products page. ' +
+      'Needs an internet connection once, to load the SQLite reader.</p>' +
+      '<input type="file" id="dbfile" accept=".db,.sqlite,.sqlite3"><div class="errbox" id="dberr"></div></div>' +
+      '<div class="card" style="border-left:5px solid #dc2626"><h2>Erase all data</h2><p class="hint" style="margin-top:0">Deletes every product, branch and history entry on this device and starts fresh.</p>' +
+      '<button class="out" id="bkwipe">Erase everything</button></div>';
+  },
+  mount: function(){
+    $("bkdown").onclick = function(){
+      var d = new Date(), stamp = dateStr(d) + "_" + pad(d.getHours()) + pad(d.getMinutes());
+      downloadBlob("stock_backup_" + stamp + ".json", new Blob([JSON.stringify({app: "stock_manager_html", saved_at: now(), data: S})], {type: "application/json"}));
+    };
+    $("bkfile").onchange = function(){
+      var f = this.files && this.files[0]; if(!f) return;
+      f.text().then(function(t){
+        var j = JSON.parse(t), d = j && j.data;
+        if(!d || !Array.isArray(d.branches) || !Array.isArray(d.products) || typeof d.stock !== "object") throw new Error("not a Stock Manager backup");
+        if(!confirm("Replace ALL data on this device with this backup" + (j.saved_at ? " from " + j.saved_at : "") + "?" +
+                    (d.auth ? "\n\nThe users and passwords from the backup will be used, so you will need to sign in again." : ""))) return;
+        var keepAuth = S.auth;
+        S = normalize(d);
+        if(S.auth) S.auth.ver = Date.now(); else S.auth = keepAuth;
+        return save().then(function(){ flash("Backup restored."); go("stock"); });
+      }).catch(function(e){ flash("Could not restore: " + (e.message || e), "error"); render(); });
+    };
+    $("dbfile").onchange = function(){
+      var f = this.files && this.files[0]; if(!f) return;
+      var err = errBox("dberr");
+      if(!confirm("Replace ALL data on this device with the data in " + f.name + "?")){ this.value = ""; return; }
+      importSqlite(f).then(function(n){ flash("Imported from " + f.name + ": " + n); go("stock"); },
+                           function(e){ err.show("Could not import: " + (e.message || e)); });
+    };
+    $("bkwipe").onclick = function(){
+      if(!confirm("Erase ALL data on this device? This cannot be undone.")) return;
+      if(!confirm("Last check: really erase everything? Download a backup first if unsure.")) return;
+      S = emptyState();
+      save().then(function(){ flash("All data erased."); go("stock"); });
+    };
+  }
+};
+function normalize(d){
+  var s = {version: 1, seq: d.seq || {}, branches: d.branches || [], products: d.products || [], stock: d.stock || {},
+           transactions: d.transactions || [], sales: d.sales || [], transfers: d.transfers || [], returns: d.returns || [], photos: d.photos || {},
+           auth: d.auth && d.auth.pw_app ? d.auth : null};
+  if(s.auth){ s.auth.users = s.auth.users || []; s.auth.log = s.auth.log || []; s.auth.ver = s.auth.ver || 1; }
+  if(s.auth && s.auth.users.length) s.seq.users = Math.max(s.seq.users || 0, s.auth.users.reduce(function(a, u){ return Math.max(a, u.id); }, 0));
+  ["branches", "products", "transactions", "sales", "transfers", "returns"].forEach(function(t){
+    var mx = s[t].reduce(function(a, r){ return Math.max(a, r.id || 0); }, 0);
+    s.seq[t] = Math.max(s.seq[t] || 0, mx);
+  });
+  return s;
+}
+function loadScript(src){
+  return new Promise(function(ok, fail){ var sc = document.createElement("script"); sc.src = src; sc.onload = ok; sc.onerror = function(){ fail(new Error("could not load the SQLite reader (are you online?)")); }; document.head.appendChild(sc); });
+}
+function importSqlite(file){
+  var base = "https://cdn.jsdelivr.net/npm/sql.js@1.8.0/dist/";
+  return (window.initSqlJs ? Promise.resolve() : loadScript(base + "sql-wasm.js"))
+    .then(function(){ return Promise.all([window.initSqlJs({locateFile: function(fn){ return base + fn; }}), file.arrayBuffer()]); })
+    .then(function(r){
+      var db = new r[0].Database(new Uint8Array(r[1]));
+      function rows(sql){ try { var res = db.exec(sql); if(!res.length) return []; var c = res[0].columns; return res[0].values.map(function(v){ var o = {}; c.forEach(function(k, i){ o[k] = v[i]; }); return o; }); } catch(e){ return null; } }
+      var br = rows("SELECT id, name FROM branches ORDER BY id"), pr = rows("SELECT id, name, unit, low_limit FROM products");
+      if(!br || !pr) throw new Error("this is not a stock_data.db file from the Python app");
+      var d = {branches: br, products: pr.map(function(p){ return {id: p.id, name: p.name, unit: p.unit || "pcs", low_limit: p.low_limit || 0, photo: null}; }),
+               stock: {}, transactions: [], sales: [], transfers: [], returns: [], photos: {}};
+      (rows("SELECT product_id, branch_id, qty FROM stock") || []).forEach(function(s){ if(s.qty) d.stock[s.branch_id + ":" + s.product_id] = s.qty; });
+      d.transactions = (rows("SELECT id, product_id, branch_id, kind, qty, note, created_at FROM transactions") || []).map(function(t){ t.note = t.note || ""; t.photo = null; return t; });
+      d.sales = (rows("SELECT id, product_id, branch_id, qty, price, total, pay_type, customer, note, created_at, settled_at FROM sales") || []).map(function(s){ s.customer = s.customer || ""; s.note = s.note || ""; return s; });
+      d.transfers = (rows("SELECT id, product_id, from_branch_id, to_branch_id, qty, note, created_at FROM transfers") || []).map(function(t){ t.note = t.note || ""; return t; });
+      d.returns = (rows("SELECT id, product_id, from_branch_id, to_branch_id, qty, reason, note, created_at FROM returns") || []).map(function(t){ t.note = t.note || ""; return t; });
+      // Users and passwords (the Pi app stores werkzeug pbkdf2 hashes, which this page can check)
+      var set = {};
+      (rows("SELECT key, value FROM settings") || []).forEach(function(r){ set[r.key] = r.value; });
+      var auth = null, unsupported = 0;
+      if(set.pw_app && set.pw_sales){
+        auth = {pw_app: set.pw_app, pw_sales: set.pw_sales, recovery: null, ver: Date.now(), users: [], log: []};
+        (rows("SELECT id, username, password_hash, role, page_access, active, created_at FROM app_users ORDER BY id") || []).forEach(function(u){
+          var pages = null;
+          try { pages = JSON.parse(u.page_access); } catch(e){}
+          var role = u.role === "admin" ? "admin" : "staff";
+          if(role !== "admin") pages = (Array.isArray(pages) ? pages : (LEGACY_PAGE_ACCESS[u.role] || ["stock", "sales"])).filter(function(p){ return PAGE_KEYS.indexOf(p) >= 0; });
+          var ok = /^pbkdf2:sha256/.test(u.password_hash || "");
+          if(!ok) unsupported++;
+          auth.users.push({id: u.id, username: u.username, password_hash: u.password_hash, role: role, pages: role === "admin" ? null : pages,
+                           active: !!u.active, created_at: u.created_at || now(), unsupported: !ok || undefined});
+        });
+        auth.log = (rows("SELECT username, event, device, created_at FROM user_log ORDER BY id DESC LIMIT 500") || []).reverse()
+          .map(function(r, i){ return {id: i + 1, username: r.username, event: r.event, device: r.device || "", created_at: r.created_at}; });
+        d.seq = {user_log: auth.log.length};
+      }
+      db.close();
+      if(!d.branches.length) d.branches = emptyState().branches;
+      var keepAuth = S.auth;
+      d.auth = auth;
+      S = normalize(d);
+      if(!S.auth) S.auth = keepAuth;
+      return save().then(function(){
+        return d.branches.length + " branches, " + d.products.length + " products, " + d.transactions.length + " stock entries, " +
+               d.sales.length + " sales, " + d.transfers.length + " transfers, " + d.returns.length + " returns" +
+               (auth ? ", " + auth.users.length + " user account(s) with their Raspberry Pi passwords" +
+                       (unsupported ? " (" + unsupported + " need a new password from an administrator)" : "") +
+                       ". Make a recovery code in Settings." : ".");
+      });
+    });
+}
+
+/* =====================================================================
+   Start
+   ===================================================================== */
+(function(){
+  var ov = $("overlay"), sb = $("sidebar");
+  $("menuBtn").addEventListener("click", function(){ sb.classList.toggle("open"); ov.classList.toggle("open"); });
+  ov.addEventListener("click", function(){ sb.classList.remove("open"); ov.classList.remove("open"); });
+  window.addEventListener("hashchange", render);
+  loadSession();
+  IDB.open().then(function(ok){
+    if(!ok) $("live").textContent = "● saved in browser storage";
+    return IDB.get();
+  }).then(function(d){
+    S = d ? normalize(d) : emptyState();
+    if(!d) return save();
+  }).then(function(){
+    render();
+    // Another tab of this file changed the data: reload it (unless you are typing)
+    if(channel) channel.onmessage = function(){
+      IDB.get().then(function(d){ if(d){ S = normalize(d); if(!busy()) render(); } });
+    };
+  });
+})();
+</script>
+</body>
+</html>
